@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600">
+  <style>
+    .title { font: bold 16px Arial, sans-serif; fill: #1a1a2e; }
+    .subtitle { font: 12px Arial, sans-serif; fill: #4a5568; }
+    .label { font: 11px Arial, sans-serif; fill: #2d3748; }
+    .small { font: 9px Arial, sans-serif; fill: #718096; }
+    .box { fill: #f7fafc; stroke: #e2e8f0; stroke-width: 1; }
+    .highlight { fill: #fef3c7; stroke: #f59e0b; stroke-width: 2; }
+  </style>
+  
+  <rect width="900" height="600" fill="#fafafa"/>
+  
+  <text x="450" y="30" text-anchor="middle" class="title">6D-SMOLM Kalman Filter Matrices — R-Matrix Placeholder</text>
+  
+  <!-- F Matrix -->
+  <g transform="translate(50, 70)">
+    <rect x="0" y="0" width="180" height="100" rx="8" class="box"/>
+    <text x="90" y="25" text-anchor="middle" class="label" font-weight="bold">F (State Transition)</text>
+    <text x="90" y="50" text-anchor="middle" class="label">I₃ (identity)</text>
+    <text x="90" y="70" text-anchor="middle" class="small">Brownian: no drift</text>
+    <text x="90" y="88" text-anchor="middle" class="small" fill="#10b981">✓ Implemented</text>
+  </g>
+  
+  <!-- H Matrix -->
+  <g transform="translate(250, 70)">
+    <rect x="0" y="0" width="180" height="100" rx="8" class="box"/>
+    <text x="90" y="25" text-anchor="middle" class="label" font-weight="bold">H (Observation)</text>
+    <text x="90" y="50" text-anchor="middle" class="label">I₃ (identity)</text>
+    <text x="90" y="70" text-anchor="middle" class="small">Direct observation</text>
+    <text x="90" y="88" text-anchor="middle" class="small" fill="#10b981">✓ Implemented</text>
+  </g>
+  
+  <!-- Q Matrix -->
+  <g transform="translate(450, 70)">
+    <rect x="0" y="0" width="180" height="100" rx="8" class="box"/>
+    <text x="90" y="25" text-anchor="middle" class="label" font-weight="bold">Q (Process Noise)</text>
+    <text x="90" y="50" text-anchor="middle" class="label">2D·Δt·I₃</text>
+    <text x="90" y="70" text-anchor="middle" class="small">From diffusion coeff</text>
+    <text x="90" y="88" text-anchor="middle" class="small" fill="#10b981">✓ Implemented</text>
+  </g>
+  
+  <!-- R Matrix - PLACEHOLDER -->
+  <g transform="translate(650, 70)">
+    <rect x="0" y="0" width="200" height="100" rx="8" class="highlight"/>
+    <text x="100" y="25" text-anchor="middle" class="label" font-weight="bold" fill="#92400e">R (Measurement Noise)</text>
+    <text x="100" y="48" text-anchor="middle" class="small" fill="#b45309">⚠️ PLACEHOLDER</text>
+    <text x="100" y="65" text-anchor="middle" class="small" fill="#92400e">Current: ~27,778 nm²</text>
+    <text x="100" y="82" text-anchor="middle" class="small" fill="#15803d">Should be: CRLB values</text>
+  </g>
+  
+  <!-- Detail box -->
+  <g transform="translate(50, 200)">
+    <rect x="0" y="0" width="800" height="180" rx="8" fill="#fff7ed" stroke="#f97316"/>
+    <text x="20" y="30" class="label" font-weight="bold" fill="#c2410c">R-Matrix (Measurement Noise Covariance) — TO BE FIXED</text>
+    
+    <text x="20" y="60" class="small">Current placeholder in costMat6DSMOLMLink.m:</text>
+    <text x="40" y="80" class="label" font-family="monospace">noiseVar = (maxSearchRadius / brownStdMult)² = (500/3)² ≈ 27,778 nm²</text>
+    
+    <text x="20" y="110" class="small" fill="#15803d">Should be (from CRLB or neural network uncertainty):</text>
+    <text x="40" y="130" class="label" font-family="monospace" fill="#15803d">R = diag(σ²_x, σ²_y, σ²_z) = diag(400, 400, 2500) nm²</text>
+    <text x="40" y="150" class="small" fill="#15803d">where σ_xy ≈ 20 nm, σ_z ≈ 50 nm from Fisher Information analysis</text>
+    
+    <text x="20" y="175" class="small">Location: costMat6DSMOLMLink.m lines 115-125, parameters: locPrecisionXY, locPrecisionZ</text>
+  </g>
+  
+  <!-- Cost function equation -->
+  <g transform="translate(50, 410)">
+    <rect x="0" y="0" width="400" height="80" rx="8" class="box"/>
+    <text x="20" y="25" class="label" font-weight="bold">6D Cost Function:</text>
+    <text x="20" y="50" class="label" font-style="italic">c_ij = w_spatial × d_spatial + w_orient × d_angular</text>
+    <text x="20" y="70" class="small">d_angular = acos(|μ̂_i · μ̂_j|) with 180° symmetry</text>
+  </g>
+  
+  <!-- Bo's insight -->
+  <g transform="translate(470, 410)">
+    <rect x="0" y="0" width="380" height="80" rx="8" fill="#ecfdf5" stroke="#10b981"/>
+    <text x="20" y="25" class="label" font-weight="bold" fill="#065f46">Bo's Gap Closing Insight:</text>
+    <text x="20" y="50" class="label" font-style="italic">cost = distance / √(timeGap)</text>
+    <text x="20" y="70" class="small">Variance scales linearly with time lag</text>
+  </g>
+  
+  <text x="450" y="580" text-anchor="middle" class="small">Emil Gillett • Landes Research Group, UIUC • 6D-SMOLM Tracking Pipeline</text>
+</svg>

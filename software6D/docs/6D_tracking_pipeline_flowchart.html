@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6D-SMOLM Tracking Pipeline — software6D</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0e12;
+    --surface: #13161c;
+    --surface2: #1a1e26;
+    --border: #252a35;
+    --border-active: #3a4255;
+    --text: #c8cdd8;
+    --text-dim: #6b7280;
+    --text-bright: #e8ecf4;
+    --accent-blue: #5b8af0;
+    --accent-cyan: #38bdf8;
+    --accent-green: #34d399;
+    --accent-amber: #fbbf24;
+    --accent-rose: #fb7185;
+    --accent-violet: #a78bfa;
+    --stage1: #2563eb;
+    --stage2: #0891b2;
+    --stage3: #059669;
+    --stage4: #d97706;
+    --stage5: #dc2626;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Source Serif 4', Georgia, serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+  }
+
+  .header {
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  .header h1 {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header .subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    font-weight: 300;
+  }
+  .header .meta {
+    margin-top: 16px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .meta-item span {
+    color: var(--accent-cyan);
+  }
+
+  .decisions {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  .decisions h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent-amber);
+    margin-bottom: 12px;
+  }
+  .decisions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .decision-item {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-amber);
+  }
+  .decision-item code {
+    color: var(--accent-cyan);
+    font-size: 11px;
+  }
+
+  .file-tree {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  .file-tree h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent-violet);
+    margin-bottom: 16px;
+  }
+  .file-tree pre {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    overflow-x: auto;
+  }
+  .file-tree .folder { color: var(--accent-blue); }
+  .file-tree .file { color: var(--text-dim); }
+  .file-tree .new { color: var(--accent-green); }
+  .file-tree .main { color: var(--accent-rose); }
+
+  .troubleshooting {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 40px;
+    overflow: hidden;
+  }
+  .troubleshooting-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
+    cursor: pointer;
+    user-select: none;
+  }
+  .troubleshooting-header h3 {
+    font-size: 14px;
+    color: #fff;
+    font-weight: 600;
+  }
+  .troubleshooting-header .chevron {
+    color: #fff;
+    transition: transform 0.25s;
+    font-size: 14px;
+  }
+  .troubleshooting.open .troubleshooting-header .chevron {
+    transform: rotate(90deg);
+  }
+  .troubleshooting-body {
+    display: none;
+    padding: 24px;
+  }
+  .troubleshooting.open .troubleshooting-body {
+    display: block;
+  }
+  .troubleshooting-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 16px;
+  }
+  .troubleshooting-table th {
+    background: var(--stage1);
+    color: #fff;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .troubleshooting-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .troubleshooting-table tr:nth-child(even) td {
+    background: var(--surface2);
+  }
+  .troubleshooting-table code {
+    color: var(--accent-cyan);
+    font-size: 11px;
+  }
+  .troubleshooting-table .updated {
+    color: var(--accent-green);
+    font-weight: 600;
+  }
+  .problem-desc {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: var(--surface2);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-rose);
+  }
+  .problem-desc strong {
+    color: var(--accent-rose);
+  }
+
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .stage {
+    position: relative;
+    margin-bottom: 0;
+  }
+
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    user-select: none;
+  }
+  .stage-header:hover {
+    border-color: var(--border-active);
+  }
+
+  .stage-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+  }
+
+  .stage-title {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-bright);
+    flex: 1;
+  }
+
+  .stage-status {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+    background: #064e3b;
+    color: var(--accent-green);
+    border: 1px solid #065f46;
+  }
+
+  .stage-chevron {
+    color: var(--text-dim);
+    transition: transform 0.25s;
+    font-size: 14px;
+  }
+  .stage.open .stage-chevron {
+    transform: rotate(90deg);
+  }
+
+  .stage-body {
+    display: none;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    background: var(--surface);
+    padding: 20px 24px 24px;
+  }
+  .stage.open .stage-body {
+    display: block;
+  }
+
+  .connector {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .connector-line {
+    width: 2px;
+    height: 28px;
+    background: var(--border);
+    position: relative;
+  }
+  .connector-line::after {
+    content: '▼';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: var(--border-active);
+  }
+
+  .file-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+  }
+  .file-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .file-name .icon { font-size: 14px; }
+  .file-name span:nth-child(2) {
+    font-weight: 500;
+    color: var(--accent-cyan);
+  }
+  .file-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .file-detail {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface);
+    padding: 12px 14px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    line-height: 1.7;
+  }
+  .file-detail code { color: var(--accent-cyan); font-size: 11px; }
+  .file-detail strong { color: var(--text); }
+
+  .file-tag {
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: auto;
+    background: #064e3b;
+    color: var(--accent-green);
+  }
+
+  .note {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: 4px;
+    margin-top: 14px;
+    border-left: 3px solid var(--accent-violet);
+  }
+  .note-label {
+    font-weight: 600;
+    color: var(--accent-violet);
+    margin-right: 6px;
+  }
+
+  .references {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-top: 40px;
+  }
+  .references h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  .ref-item {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+  }
+  .ref-item strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-label">Landes Research Group · UIUC</div>
+    <h1>6D-SMOLM Tracking Pipeline</h1>
+    <div class="subtitle">Extension of u-track3D for 6D single-molecule orientation and localization microscopy</div>
+    <div class="meta">
+      <div class="meta-item">Author: <span>Emil Gillett</span></div>
+      <div class="meta-item">Version: <span>1.4.0</span></div>
+      <div class="meta-item">Last updated: <span>2026-02-15</span></div>
+    </div>
+  </div>
+
+  <div class="decisions">
+    <h3>Key Design Decisions</h3>
+    <div class="decisions-grid">
+      <div class="decision-item">Notation: <code>θ, φ</code> = orientation angles, <code>α</code> = angular displacement, <code>s</code> = spatial displacement</div>
+      <div class="decision-item">Core tracker: <code>trackCloseGapsKalmanSparse</code> — unmodified</div>
+      <div class="decision-item">Kalman filter: Spatial only (x,y,z); orientation is a constraint</div>
+      <div class="decision-item">Dipole symmetry: 180° via <code>|cos(angle)|</code></div>
+      <div class="decision-item">Bo's insight: <code>√(timeGap)</code> normalization in gap closing</div>
+      <div class="decision-item">Motion models: Brownian spatial + Brownian rotational</div>
+    </div>
+  </div>
+
+  <div class="file-tree">
+    <h3>📁 File Structure</h3>
+    <pre><span class="folder">software6D/</span>
+├── <span class="main">run6DTracking.m</span>                    <span class="new">← Main pipeline wrapper</span>
+├── <span class="file">README.md</span>
+├── <span class="file">6D_tracking_pipeline_flowchart.html</span>  <span class="new">← This documentation</span>
+│
+├── <span class="folder">preprocessing/</span>
+│   └── <span class="file">convert6DSMOLMtoMovieInfo.m</span>       <span class="new">← Fusion output → movieInfo</span>
+│
+├── <span class="folder">cost_functions/</span>
+│   ├── <span class="file">angularDistance.m</span>                 <span class="new">← Dipole distance (180° symmetry)</span>
+│   ├── <span class="file">costMat6DSMOLMLink.m</span>             <span class="new">← Cost Matrix 1: frame-to-frame</span>
+│   └── <span class="file">costMat6DSMOLMCloseGaps.m</span>        <span class="new">← Cost Matrix 2: gap closing</span>
+│
+├── <span class="folder">helpers/</span>
+│   └── <span class="file">angularDistance.m</span>                 <span class="new">← Copy for general use</span>
+│
+├── <span class="folder">postprocessing/</span>
+│   ├── <span class="file">extractTracks6D.m</span>                 <span class="new">← tracksFinal → trajectory matrix</span>
+│   ├── <span class="file">traj_filt_6D.m</span>                    <span class="new">← Filter + angular interpolation</span>
+│   └── <span class="file">combineTrajectories6D.m</span>           <span class="new">← Merge multi-movie trajectories</span>
+│
+├── <span class="folder">analysis/</span>
+│   ├── <span class="file">estimateDiffusion6D_MLE.m</span>         <span class="new">← D_trans + D_rot (Bo's MLE)</span>
+│   ├── <span class="file">estimateDiffusion6D_DualMLE.m</span>     <span class="new">← Both MLE(1) and MLE(2)</span>
+│   ├── <span class="file">visualizeCostMatrix.m</span>             <span class="new">← Cost matrix heatmap</span>
+│   └── <span class="file">validateTracking6D.m</span>              <span class="new">← Performance metrics (Jaqaman)</span>
+│
+├── <span class="folder">tests/</span>
+│   ├── <span class="file">run_demo.m</span>                        <span class="new">← Full demo with visualization</span>
+│   ├── <span class="file">generate6DTrajectories.m</span>          <span class="new">← Synthetic trajectory generator</span>
+│   └── <span class="file">test_pipeline_synthetic.m</span>         <span class="new">← Component unit tests</span>
+│
+└── <span class="folder">docs/</span>
+    ├── <span class="file">6D_cost_matrices.png</span>
+    ├── <span class="file">6D_cost_matrices.svg</span>
+    ├── <span class="file">6D_tracking_pipeline_flowchart.html</span>
+    └── <span class="file">troubleshooting_track_segmentation.docx</span> <span class="new">← Troubleshooting guide</span></pre>
+  </div>
+
+  <div class="troubleshooting" id="troubleshooting">
+    <div class="troubleshooting-header" onclick="toggleTroubleshooting()">
+      <h3> Troubleshooting: Track Over-Segmentation</h3>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="troubleshooting-body">
+      <div class="problem-desc">
+        <strong>Problem:</strong> The tracking algorithm produces many more track segments than expected 
+        (e.g., 95 tracks from 5 emitters). This occurs when molecules undergo photoblinking 
+        with dark periods longer than the gap closing window, or when gap closing parameters are too restrictive.
+      </div>
+      
+      <h4 style="color: var(--accent-green); margin-bottom: 12px;">Solution: Relax Gap Closing Parameters</h4>
+      
+      <table class="troubleshooting-table">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Original</th>
+            <th>Updated</th>
+            <th>Explanation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>gapCloseParam.timeWindow</code></td>
+            <td>5</td>
+            <td class="updated">10</td>
+            <td>Maximum frames to search for gap closing. Increase for longer dark periods.</td>
+          </tr>
+          <tr>
+            <td><code>gapCloseParam.minTrackLen</code></td>
+            <td>3</td>
+            <td class="updated">2</td>
+            <td>Minimum track length to participate in gap closing. Reducing keeps short segments for linking.</td>
+          </tr>
+          <tr>
+            <td><code>maxSearchRadius</code></td>
+            <td>1000 nm</td>
+            <td class="updated">2000 nm</td>
+            <td>Maximum spatial distance for gap closing. Increase for faster diffusing molecules.</td>
+          </tr>
+          <tr>
+            <td><code>brownStdMult / linStdMult</code></td>
+            <td>3</td>
+            <td class="updated">4</td>
+            <td>Multiplier for motion standard deviation. Higher values allow more distant links.</td>
+          </tr>
+          <tr>
+            <td><code>timeReachConfB / timeReachConfL</code></td>
+            <td>3 / 4</td>
+            <td class="updated">5 / 6</td>
+            <td>Time window for computing motion statistics. Longer = more reliable velocity estimates.</td>
+          </tr>
+          <tr>
+            <td><code>gapPenalty</code></td>
+            <td>1.5</td>
+            <td class="updated">0.5</td>
+            <td>Penalty per frame of gap. Lower values favor track joining.</td>
+          </tr>
+          <tr>
+            <td><code>wOrient</code></td>
+            <td>0.3</td>
+            <td class="updated">0.2</td>
+            <td>Weight for orientation cost. Reducing makes algorithm less strict on orientation matching.</td>
+          </tr>
+          <tr>
+            <td><code>wOmega</code></td>
+            <td>0.5</td>
+            <td class="updated">0.1</td>
+            <td>Weight for wobble angle cost. Reduce since wobble may fluctuate during dark periods.</td>
+          </tr>
+          <tr>
+            <td><code>maxAngularDist</code></td>
+            <td>π/3 (60°)</td>
+            <td class="updated">π/2 (90°)</td>
+            <td>Maximum angular distance threshold. Increasing allows larger orientation changes.</td>
+          </tr>
+          <tr>
+            <td><code>ConnectSize</code> (post-processing)</td>
+            <td>3</td>
+            <td class="updated">10</td>
+            <td>Maximum gap for interpolation. Should match timeWindow to avoid further splitting.</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <div class="note" style="margin-top: 20px;">
+        <span class="note-label">Tip:</span> Start with moderate relaxation and iteratively adjust until track counts match expected values. 
+        The diffusion coefficient estimates provide validation—if D values are reasonable, the tracking is likely correct.
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== WRAPPER ARCHITECTURE SECTION ==================== -->
+  <div class="troubleshooting" id="wrapper-arch">
+    <div class="troubleshooting-header" onclick="toggleWrapperArch()">
+      <h3> Wrapper Architecture: How 6D Costs Integrate with u-track3D</h3>
+      <span class="chevron" id="wrapper-chevron">▶</span>
+    </div>
+    <div class="troubleshooting-body" id="wrapper-body" style="display: none;">
+      
+      <div class="problem-desc" style="background: linear-gradient(135deg, rgba(91,138,240,0.15), rgba(56,189,248,0.1)); border-left: 3px solid var(--accent-blue);">
+        <strong>Key Insight:</strong> Rather than reimplementing u-track3D's complex LAP framework, our 6D cost functions 
+        act as <em>wrappers</em> around the base u-track functions. The wrapper calls the base function to compute spatial 
+        costs, then adds orientation costs on top.
+      </div>
+      
+      <h4 style="color: var(--accent-cyan); margin: 24px 0 16px;">Why Use a Wrapper Approach?</h4>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div style="background: var(--surface2); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+          <div style="color: var(--accent-green); font-weight: 600; margin-bottom: 8px;"> Leverages Battle-Tested Code</div>
+          <div style="font-size: 12px; color: var(--text-dim);">The base u-track functions handle complex motion prediction, Kalman filtering, sparse matrix construction, and merge/split logic—all validated over 15+ years.</div>
+        </div>
+        <div style="background: var(--surface2); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+          <div style="color: var(--accent-green); font-weight: 600; margin-bottom: 8px;"> Minimal Maintenance Burden</div>
+          <div style="font-size: 12px; color: var(--text-dim);">When u-track3D is updated, only the wrapper interface needs checking—not the entire tracking algorithm.</div>
+        </div>
+        <div style="background: var(--surface2); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+          <div style="color: var(--accent-green); font-weight: 600; margin-bottom: 8px;"> Clean Separation of Concerns</div>
+          <div style="font-size: 12px; color: var(--text-dim);">Spatial tracking stays in u-track3D. Orientation logic is isolated in our wrapper. Easy to debug and extend.</div>
+        </div>
+      </div>
+
+      <h4 style="color: var(--accent-cyan); margin: 24px 0 16px;">Wrapper Flow Diagram</h4>
+      
+      <div style="background: var(--surface); padding: 24px; border-radius: 12px; border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; overflow-x: auto;">
+<pre style="margin: 0; color: var(--text);">
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         <span style="color: var(--accent-amber);">costMat6DSMOLMCloseGaps</span> (our wrapper)                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  <span style="color: var(--accent-cyan);">STEP 1:</span> Extract custom 6D parameters from costMatParam                        │
+│          └── wOrient, wOmega, maxAngularDist, useOrientation, etc.             │
+│                                                                                 │
+│  <span style="color: var(--accent-cyan);">STEP 2:</span> Remove custom fields (u-track doesn't recognize them)                 │
+│          └── costMatParam = rmfield(costMatParam, {'wOrient', 'wOmega', ...})  │
+│                                                                                 │
+│  <span style="color: var(--accent-cyan);">STEP 3:</span> Call base u-track function with cleaned parameters                   │
+│          ┌──────────────────────────────────────────────────────────────┐      │
+│          │  <span style="color: var(--accent-green);">costMatRandomDirectedSwitchingMotionCloseGaps</span>              │      │
+│          │                                                              │      │
+│          │  • Computes motion statistics from track history             │      │
+│          │  • Applies Kalman filter predictions                         │      │
+│          │  • Builds sparse cost matrix with spatial costs              │      │
+│          │  • Handles search radius cutoffs                             │      │
+│          │                                                              │      │
+│          │  Returns: <span style="color: var(--accent-amber);">costMat</span> [sparse, N_ends × N_starts]                │      │
+│          └──────────────────────────────────────────────────────────────┘      │
+│                                      │                                          │
+│                                      ▼                                          │
+│  <span style="color: var(--accent-cyan);">STEP 4:</span> Add orientation costs to valid links                                 │
+│                                                                                 │
+│          <span style="color: var(--text-dim);">for each nonzero entry (i,j) in costMat:</span>                             │
+│              spatial_cost = costMat(i,j)                                       │
+│              orient_cost  = compute6DOrientationCost(track_i, track_j)          │
+│              costMat(i,j) = spatial_cost + wOrient × orient_cost               │
+│                                                                                 │
+│  <span style="color: var(--accent-cyan);">STEP 5:</span> Return modified cost matrix to u-track                              │
+│          └── trackCloseGapsKalmanSparse uses this for LAP optimization         │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+</pre>
+      </div>
+
+      <h4 style="color: var(--accent-cyan); margin: 24px 0 16px;">Critical Implementation Detail: Function Signature</h4>
+      
+      <div class="note" style="background: rgba(251,113,133,0.1); border-left: 3px solid var(--accent-rose);">
+        <span class="note-label" style="color: var(--accent-rose);">⚠️ Common Pitfall</span>
+        The wrapper <strong>must</strong> have the exact same function signature as the base function. u-track3D passes exactly 10 arguments:
+      </div>
+      
+      <pre style="background: var(--surface2); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 16px 0; font-size: 11px;"><code style="color: var(--text);">function [costMat, nonlinkMarker, indxMerge, numMerge, indxSplit, numSplit, errFlag] = ...
+    costMat6DSMOLMCloseGaps(<span style="color: var(--accent-green);">trackedFeatInfo</span>, <span style="color: var(--accent-green);">trackedFeatIndx</span>, ...
+        <span style="color: var(--accent-green);">trackStartTime</span>, <span style="color: var(--accent-green);">trackEndTime</span>, <span style="color: var(--accent-amber);">costMatParam</span>, <span style="color: var(--accent-amber);">gapCloseParam</span>, ...
+        <span style="color: var(--accent-green);">kalmanFilterInfo</span>, <span style="color: var(--accent-green);">nnDistLinkedFeat</span>, <span style="color: var(--accent-green);">probDim</span>, <span style="color: var(--accent-cyan);">movieInfo</span>)
+
+<span style="color: var(--text-dim);">% Arguments 1-9: Standard u-track parameters (passed through to base function)
+% Argument 10: movieInfo — CRITICAL! Contains our orientation data (theta, phi, omega)</span></code></pre>
+
+      <h4 style="color: var(--accent-cyan); margin: 24px 0 16px;">Another Critical Detail: Column Vectors for Motion Multipliers</h4>
+      
+      <div class="note" style="background: rgba(251,191,36,0.1); border-left: 3px solid var(--accent-amber);">
+        <span class="note-label" style="color: var(--accent-amber);">⚠️ Undocumented Requirement</span>
+        The parameters <code>brownStdMult</code> and <code>linStdMult</code> must be <strong>column vectors</strong> of length <code>timeWindow</code>, not row vectors or scalars. This is not documented but causes dimension mismatch errors in <code>getSearchRegionRDS.m</code> line 441.
+      </div>
+      
+      <pre style="background: var(--surface2); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 16px 0; font-size: 11px;"><code style="color: var(--text);"><span style="color: var(--accent-rose);">% WRONG - causes "Dimensions not consistent" error:</span>
+'brownStdMult', [3 3 3 3 3], ...    <span style="color: var(--text-dim);">% row vector</span>
+'brownStdMult', 3, ...              <span style="color: var(--text-dim);">% scalar</span>
+
+<span style="color: var(--accent-green);">% CORRECT - must be column vector:</span>
+'brownStdMult', 3*ones(timeWindow, 1), ...   <span style="color: var(--text-dim);">% [3; 3; 3; 3; 3]</span>
+'linStdMult', 3*ones(timeWindow, 1), ...</code></pre>
+
+      <h4 style="color: var(--accent-cyan); margin: 24px 0 16px;">Diagnostic Output</h4>
+      
+      <p style="margin-bottom: 12px; color: var(--text-dim);">The wrapper includes diagnostic output to verify it's being called correctly:</p>
+      
+      <pre style="background: #1a1e26; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 16px 0; font-size: 11px;"><code style="color: #6ee7b7;">  *** costMat6DSMOLMCloseGaps CALLED ***
+  [costMat6DSMOLMCloseGaps] Base function returned:
+    costMat empty: 0, size: [250 x 250]
+    costMat sparse: 1
+    errFlag: []
+    nonzero entries (potential links): 49</code></pre>
+      
+      <p style="color: var(--text-dim); font-size: 12px;">If you see "CALLED" but 0 nonzero entries, the spatial search radius may be too restrictive. If you don't see "CALLED" at all, check that the cost function path is correct in MATLAB.</p>
+      
+    </div>
+  </div>
+
+  <script>
+    function toggleWrapperArch() {
+      const body = document.getElementById('wrapper-body');
+      const chevron = document.getElementById('wrapper-chevron');
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        chevron.textContent = '▼';
+      } else {
+        body.style.display = 'none';
+        chevron.textContent = '▶';
+      }
+    }
+  </script>
+
+  <div class="pipeline">
+    <div class="stage open" id="stage1">
+      <div class="stage-header" onclick="toggleStage('stage1')">
+        <div class="stage-number" style="background: var(--stage1);">1</div>
+        <div class="stage-title">Preprocessing</div>
+        <div class="stage-status">done</div>
+        <span class="stage-chevron">▶</span>
+      </div>
+      <div class="stage-body">
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>convert6DSMOLMtoMovieInfo.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Converts Fusion output to u-track3D <code>movieInfo</code> struct.</div>
+          <div class="file-detail"><strong>Input:</strong> [frame, signal, x_nm, y_nm, z_nm, theta_deg, phi_deg, gamma]
+
+<strong>Output:</strong> movieInfo(i) with fields: xCoord, yCoord, zCoord, amp, theta, phi, omega
+
+<strong>Key conversions:</strong>
+  • theta/phi: degrees → radians
+  • gamma → omega: Ω = π(3 - √(1 + 8γ)) steradians</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <div class="stage" id="stage2">
+      <div class="stage-header" onclick="toggleStage('stage2')">
+        <div class="stage-number" style="background: var(--stage2);">2</div>
+        <div class="stage-title">Cost Matrix 1: Frame-to-Frame Linking</div>
+        <div class="stage-status">done</div>
+        <span class="stage-chevron">▶</span>
+      </div>
+      <div class="stage-body">
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>costMat6DSMOLMLink.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc"><strong>Wrapper approach:</strong> Calls original u-track function, adds orientation costs.</div>
+          <div class="file-detail"><strong>Total cost:</strong> C_total = w_spatial × C_spatial + w_orient × C_orient + w_ω × C_ω
+
+<strong>Where:</strong>
+  C_orient = α² / maxAngDist²     (α = angular displacement)
+  C_ω = Δω² / (2π)²               (Δω = wobble difference, range [0, 2π] sr)
+  α = arccos(|μ̂₁ · μ̂₂|) ∈ [0, π/2]   (with head-tail symmetry)
+
+<strong>Pseudo-Kalman mode (optional):</strong>
+  C_orient = α² / (P_pred + R_meas)
+  P_pred = 2 × D_rot × Δt         (expected variance from diffusion)
+  R_meas = σ_CRLB²                (measurement variance)</div>
+        </div>
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>angularDistance.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Orientation distance with 180° dipole symmetry: d(μ̂, -μ̂) = 0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <div class="stage" id="stage3">
+      <div class="stage-header" onclick="toggleStage('stage3')">
+        <div class="stage-number" style="background: var(--stage3);">3</div>
+        <div class="stage-title">Cost Matrix 2: Gap Closing</div>
+        <div class="stage-status">done</div>
+        <span class="stage-chevron">▶</span>
+      </div>
+      <div class="stage-body">
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>costMat6DSMOLMCloseGaps.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Gap closing with Bo Shuang's √(timeGap) normalization.</div>
+          <div class="file-detail"><strong>Bo's insight (Langmuir 2013):</strong>
+Angular displacement during dark periods scales as √(timeGap).
+
+<strong>Modified cost:</strong>
+  α_scaled = α / √(timeGap)
+  Δω_scaled = Δω / √(timeGap)
+
+<strong>Physical basis:</strong> ⟨Δα²⟩ = 2 D_rot Δt, so expected α grows as √Δt</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <div class="stage" id="stage4">
+      <div class="stage-header" onclick="toggleStage('stage4')">
+        <div class="stage-number" style="background: var(--stage4);">4</div>
+        <div class="stage-title">Post-Processing</div>
+        <div class="stage-status">done</div>
+        <span class="stage-chevron">▶</span>
+      </div>
+      <div class="stage-body">
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>extractTracks6D.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Converts tracksFinal to trajectory matrix with orientation data.</div>
+        </div>
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>traj_filt_6D.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Filter trajectories, interpolate gaps with circular φ handling.</div>
+        </div>
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>combineTrajectories6D.m</span>
+            <span class="file-tag">new</span>
+          </div>
+          <div class="file-desc">Merge trajectories from multiple movies.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <div class="stage" id="stage5">
+      <div class="stage-header" onclick="toggleStage('stage5')">
+        <div class="stage-number" style="background: var(--stage5);">5</div>
+        <div class="stage-title">Analysis &amp; Validation</div>
+        <div class="stage-status">done</div>
+        <span class="stage-chevron">▶</span>
+      </div>
+      <div class="stage-body">
+        <div class="file-card">
+          <div class="file-name">
+            
+            <span>estimateDiffusion6D_MLE.m</span>
+            <span class="file-tag">original</span>
+          </div>
+          <div class="file-desc">Single MLE estimation of D_s and D_α with variable time lags.</div>
+          <div class="file-detail"><strong>MSD equations:</strong>
+  Translational: ⟨Δs²⟩ = 2d D_s Δt + 2σ_s²
+  Rotational:    ⟨Δα²⟩ = 2 D_α Δt + 2σ_α²
+
+<strong>MLE(1) closed-form (Bo Shuang Eq. 4):</strong>
+  D_s^(1) = (1/(2N·Δt)) · Σ (Δs_i²/n_i)
+  D_α^(1) = (1/(2N·Δt)) · Σ (Δα_i²/n_i)
+
+<strong>Where:</strong>
+  Δs = spatial displacement, Δα = angular displacement
+  n_i = frame count for step i (handles blinking)
+  d = dimensions (3 for translation), N = total steps</div>
+        </div>
+        
+        <div class="file-card" style="border-color: var(--accent-green);">
+          <div class="file-name">
+            
+            <span>estimateDiffusion6D_DualMLE.m</span>
+            <span class="file-tag" style="background: var(--accent-green);">new</span>
+          </div>
+          <div class="file-desc">Dual MLE estimation implementing both methods from Bo Shuang's Langmuir 2013 paper.</div>
+          <div class="file-detail"><strong>MLE(1)</strong> — For low-noise data (x &lt; 0.1), Eq. 3-4:
+  L(Δs) = Σ ln{ 1/√(4πD_s·n_i·Δt) · exp(-Δs_i²/(4D_s·n_i·Δt)) }
+  D_s^(1) = (1/(2N·Δt)) · Σ (Δs_i²/n_i)
+
+<strong>MLE(2)</strong> — For noisy data (0.1 &lt; x &lt; 10), Eq. 7-8:
+  L(Δ) = -½ ln|Σ| - ½ Δᵀ Σ⁻¹ Δ
+  (Σ_s)_ij = (2D_s·n_i·Δt + 2σ_s²)·δ_ij - σ_s²·δ_{i,j±1}
+
+<strong>Where:</strong> x = σ²/(D·Δt) is the reduced localization error.
+
+<strong>Output:</strong> D_s_MLE1, D_s_MLE2, D_α_MLE1, D_α_MLE2 + auto-recommendation.</div>
+        </div>
+
+        <div class="file-card" style="border-color: var(--accent-cyan);">
+          <div class="file-name">
+            
+            <span>visualizeCostMatrix.m</span>
+            <span class="file-tag" style="background: var(--accent-cyan);">new</span>
+          </div>
+          <div class="file-desc">Cost matrix visualization for tracking diagnostics (based on Jaqaman 2008 Fig. 1).</div>
+          <div class="file-detail"><strong>Visualizations:</strong>
+  • Heatmap of LAP cost matrix (log scale optional)
+  • Cost distribution histogram with statistics
+  • Sparsity and valid link analysis
+  • Optional 6D breakdown: spatial vs orientation costs
+
+<strong>Usage:</strong>
+  [figHandle, costData] = visualizeCostMatrix(costMat, 'Title', 'Gap Closing');</div>
+        </div>
+
+        <div class="file-card" style="border-color: var(--accent-violet);">
+          <div class="file-name">
+            
+            <span>validateTracking6D.m</span>
+            <span class="file-tag" style="background: var(--accent-violet);">new</span>
+          </div>
+          <div class="file-desc">Tracking validation metrics based on Jaqaman et al. Nature Methods 2008.</div>
+          <div class="file-detail"><strong>Metrics computed:</strong>
+  • <strong>Linking Accuracy:</strong> % of correct frame-to-frame links
+  • <strong>Track Completeness:</strong> How much of each GT particle was recovered
+  • <strong>Track Purity:</strong> Fraction of track from single GT particle
+  • <strong>Split/Merge Detection:</strong> Counts of GT splits and tracked merges
+  • <strong>Lifetime Distribution:</strong> Kolmogorov-Smirnov test vs ground truth
+
+<strong>Output:</strong> metrics struct + 3 diagnostic figures (bar charts, ECDF, histograms)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decisions" style="border-left: 3px solid var(--accent-green); margin-top: 32px;">
+    <h3>Simulation & Testing</h3>
+    <div class="file-card" style="margin-top: 8px;">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-rose);">tests/run_demo.m</span>
+        <span class="file-tag">main</span>
+      </div>
+      <div class="file-desc">Full pipeline demo with comprehensive visualization and MLE diffusion analysis.</div>
+      <div class="file-detail"><strong>Features:</strong>
+  • Synthetic 6D trajectory generation with configurable motion models
+  • Full tracking pipeline execution with cost matrix saving
+  • 3×3 visualization: XY/XZ/3D trajectories, θ/φ/Ω time series, D comparison
+  • Cost matrix analysis with spatial/orientation breakdown
+  • Ground truth trajectory option for MLE validation</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-green);">tests/generate6DTrajectories.m</span>
+        <span class="file-tag">new</span>
+      </div>
+      <div class="file-desc">Synthetic trajectory generator with multiple motion models and photophysics.</div>
+      <div class="file-detail"><strong>Spatial models:</strong> brownian, confined, directed, hop
+<strong>Rotational models:</strong> brownian, wobble, directed
+<strong>Photophysics:</strong> Blinking (on/off rates), signal variation
+<strong>Noise:</strong> Configurable localization error (x,y,z,θ,φ)</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-cyan);">tests/test_pipeline_synthetic.m</span>
+        <span class="file-tag">new</span>
+      </div>
+      <div class="file-desc">Automated pipeline testing with synthetic data and ground truth comparison.</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-amber);">tests/debug_mle.m</span>
+        <span class="file-tag">new</span>
+      </div>
+      <div class="file-desc">MLE debugging script for validating diffusion coefficient estimation.</div>
+    </div>
+  </div>
+
+  <div class="decisions" style="border-left: 3px solid var(--accent-violet); margin-top: 32px;">
+    <h3>Motion Model Classes</h3>
+    <div class="file-card" style="margin-top: 8px;">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-violet);">tests/NormalDiffusion.m</span>
+        <span class="file-tag">class</span>
+      </div>
+      <div class="file-desc">Standard Brownian motion: ⟨Δr²⟩ = 2dDΔt</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-violet);">tests/ConfinedDiffusion.m</span>
+        <span class="file-tag">class</span>
+      </div>
+      <div class="file-desc">Confined diffusion with reflective boundaries or harmonic potential.</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-violet);">tests/DirectedMotion.m</span>
+        <span class="file-tag">class</span>
+      </div>
+      <div class="file-desc">Directed motion with constant velocity + diffusion: x(t) = x₀ + vt + √(2D)·W(t)</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-violet);">tests/AnomalousDiffusion.m</span>
+        <span class="file-tag">class</span>
+      </div>
+      <div class="file-desc">Anomalous diffusion: ⟨Δr²⟩ ∝ Δtᵅ (subdiffusion α&lt;1, superdiffusion α&gt;1)</div>
+    </div>
+  </div>
+
+  <div class="decisions" style="border-left: 3px solid var(--accent-cyan); margin-top: 32px;">
+    <h3>Analysis Tools</h3>
+    <div class="file-card" style="margin-top: 8px;">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-cyan);">analysis/diagnoseTrackingErrors.m</span>
+        <span class="file-tag">new</span>
+      </div>
+      <div class="file-desc">Comprehensive tracking error diagnosis with ground truth comparison.</div>
+      <div class="file-detail"><strong>Diagnostics:</strong>
+  • Track fragmentation analysis (splits, merges)
+  • Linking error identification
+  • Cost matrix threshold analysis
+  • Per-particle error breakdown</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span style="color: var(--accent-cyan);">analysis/visualizeKalmanScaling.m</span>
+        <span class="file-tag">new</span>
+      </div>
+      <div class="file-desc">Visualization of Kalman filter adaptive scaling behavior.</div>
+    </div>
+  </div>
+
+  <div class="decisions" style="border-left: 3px solid var(--text-dim); margin-top: 32px;">
+    <h3>Documentation</h3>
+    <div class="file-card" style="margin-top: 8px;">
+      <div class="file-name">
+        
+        <span>docs/tracking_theory.html</span>
+      </div>
+      <div class="file-desc">Mathematical foundations of 6D tracking cost functions.</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span>docs/MLE_diffusion_equations.html</span>
+      </div>
+      <div class="file-desc">MLE derivations for diffusion coefficient estimation (Bo Shuang method).</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span>docs/BENCHMARKING_AND_PHOTOPHYSICS.docx</span>
+      </div>
+      <div class="file-desc">Guide to benchmarking tracking performance and photophysics simulation.</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span>docs/troubleshooting_track_segmentation.docx</span>
+      </div>
+      <div class="file-desc">Troubleshooting guide for track fragmentation issues.</div>
+    </div>
+    <div class="file-card">
+      <div class="file-name">
+        
+        <span>docs/ORIENTATION_COST_IMPLEMENTATION.md</span>
+      </div>
+      <div class="file-desc">Implementation details for orientation cost calculations.</div>
+    </div>
+  </div>
+
+  <div class="references">
+    <h3>Key References</h3>
+    <div class="ref-item"><strong>u-track3D:</strong> Roudot et al. <em>Cell Reports Methods</em> (2023)</div>
+    <div class="ref-item"><strong>u-track:</strong> Jaqaman et al. <em>Nature Methods</em> 5, 695–698 (2008)</div>
+    <div class="ref-item"><strong>MLE Diffusion:</strong> Shuang et al. <em>Langmuir</em> 29, 228-234 (2013)</div>
+    <div class="ref-item"><strong>Kalman/Innovation:</strong> Berglund, A.J. <em>Phys. Rev. E</em> 82, 011917 (2010); Welch & Bishop, UNC TR 95-041 (2006)</div>
+  </div>
+
+  <div class="references">
+    <h3>Changelog</h3>
+    <div class="ref-item"><strong>2026-02-23:</strong> Added motion model classes (NormalDiffusion, ConfinedDiffusion, DirectedMotion, AnomalousDiffusion). Added diagnoseTrackingErrors.m and visualizeKalmanScaling.m. Updated documentation section with all docs files. Fixed orientation cost visualization bug (matrix alignment).</div>
+    <div class="ref-item"><strong>2026-02-15:</strong> Updated MLE equations to exactly match Bo Shuang Langmuir 2013 (Eq. 3-4, 7-8). Changed notation: D_s/D_α (diffusion), σ_s/σ_α (precision). Clarified n_i = frame count for handling blinking.</div>
+    <div class="ref-item"><strong>2026-02-14:</strong> Added pseudo-Kalman orientation cost mode. Fixed wobble normalization: (2π)² instead of π². Updated variable notation: s=spatial displacement, α=angular displacement, n=dimensions. Updated MSD equations in documentation.</div>
+    <div class="ref-item"><strong>2026-02-10:</strong> Added wrapper architecture explanation. Added Dual MLE (MLE1 + MLE2 from Bo's paper). Added cost matrix visualization. Added tracking validation metrics (Jaqaman 2008). Updated demo to show both MLE methods.</div>
+    <div class="ref-item"><strong>2026-02-09:</strong> Added troubleshooting section. Updated file structure. Added run_demo.m with 3×3 visualization. Relaxed gap closing parameters.</div>
+    <div class="ref-item"><strong>2026-02-06:</strong> Initial implementation of all pipeline functions.</div>
+  </div>
+
+</div>
+
+<script>
+function toggleStage(id) { document.getElementById(id).classList.toggle('open'); }
+function toggleTroubleshooting() { document.getElementById('troubleshooting').classList.toggle('open'); }
+</script>
+</body>
+</html>

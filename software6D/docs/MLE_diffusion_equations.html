@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MLE Diffusion Equations - Translational & Rotational</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: white;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .equation-box {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        .translational {
+            border-left: 4px solid #3498db;
+        }
+        .rotational {
+            border-left: 4px solid #e74c3c;
+        }
+        .shared {
+            border-left: 4px solid #9b59b6;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #e67e22;
+            padding-bottom: 10px;
+        }
+        h3 {
+            margin-top: 0;
+        }
+        .section-header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 30px 0 20px 0;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background: #f8f9fa;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .tag-trans { background: #3498db; color: white; }
+        .tag-rot { background: #e74c3c; color: white; }
+    </style>
+</head>
+<body>
+
+<h2>MLE Diffusion Analysis: Translational & Rotational</h2>
+<p>Based on Bo Shuang (Langmuir 2013) and Berglund (Phys. Rev. E 2010)</p>
+
+<!-- ==================== MLE 1 ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">MLE 1: Known Localization Precision (Eq. 3-4)</h3>
+</div>
+
+<div class="equation-box translational">
+    <h3>Translational MLE 1 <span class="tag tag-trans">Spatial</span></h3>
+    <p><strong>Log-likelihood:</strong></p>
+    <p>
+    \[
+    L(\Delta s) = \sum_{i=1}^{N} \log \left\{ \frac{1}{\sqrt{4\pi D_s n_i \Delta t}} \exp\left(-\frac{\Delta s_i^2}{4 D_s n_i \Delta t}\right) \right\}
+    \]
+    </p>
+    <p><strong>Closed-form estimate:</strong></p>
+    <p>
+    \[
+    D_s^{(1)} = \frac{1}{2N\Delta t} \sum_{i=1}^{N} \frac{\Delta s_i^2}{n_i}
+    \]
+    </p>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Rotational MLE 1 <span class="tag tag-rot">Angular</span></h3>
+    <p><strong>Log-likelihood:</strong></p>
+    <p>
+    \[
+    L(\Delta \alpha) = \sum_{i=1}^{N} \log \left\{ \frac{1}{\sqrt{4\pi D_\alpha n_i \Delta t}} \exp\left(-\frac{\Delta \alpha_i^2}{4 D_\alpha n_i \Delta t}\right) \right\}
+    \]
+    </p>
+    <p><strong>Closed-form estimate:</strong></p>
+    <p>
+    \[
+    D_\alpha^{(1)} = \frac{1}{2N\Delta t} \sum_{i=1}^{N} \frac{\Delta \alpha_i^2}{n_i}
+    \]
+    </p>
+</div>
+
+<!-- ==================== MLE 2 ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">MLE 2: Joint Estimation with Motion Blur (Eq. 5-8)</h3>
+</div>
+
+<div class="equation-box translational">
+    <h3>Translational Covariances (Eq. 5) <span class="tag tag-trans">Spatial</span></h3>
+    <p>
+    \[
+    \langle \Delta s_k \Delta s_k \rangle = 2D_s n_k \Delta t - 2(2D_s R\Delta t - \sigma_s^2) = \alpha_k
+    \]
+    \[
+    \langle \Delta s_{k \pm 1} \Delta s_k \rangle = 2D_s R\Delta t - \sigma_s^2 = \beta
+    \]
+    \[
+    \langle \Delta s_k \Delta s_j \rangle = 0 \quad \text{otherwise}
+    \]
+    </p>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Rotational Covariances (Eq. 5 analog) <span class="tag tag-rot">Angular</span></h3>
+    <p>
+    \[
+    \langle \Delta \alpha_k \Delta \alpha_k \rangle = 2D_\alpha n_k \Delta t - 2(2D_\alpha R\Delta t - \sigma_\alpha^2) = \alpha_k
+    \]
+    \[
+    \langle \Delta \alpha_{k \pm 1} \Delta \alpha_k \rangle = 2D_\alpha R\Delta t - \sigma_\alpha^2 = \beta
+    \]
+    \[
+    \langle \Delta \alpha_k \Delta \alpha_j \rangle = 0 \quad \text{otherwise}
+    \]
+    </p>
+</div>
+
+<div class="equation-box shared">
+    <h3>Log-likelihood (Eq. 7) <span class="tag tag-trans">Spatial</span> <span class="tag tag-rot">Angular</span></h3>
+    <p>
+    \[
+    L(\Delta) = -\frac{1}{2} \log|\Sigma| - \frac{1}{2} \Delta^T \Sigma^{-1} \Delta
+    \]
+    </p>
+    <p class="note">Same form for both translational (Δs) and rotational (Δα) diffusion.</p>
+</div>
+
+<div class="equation-box translational">
+    <h3>Translational Covariance Matrix (Eq. 8) <span class="tag tag-trans">Spatial</span></h3>
+    <p>
+    \[
+    (\Sigma_s)_{ij} = [2D_s n_i \Delta t - 2(2D_s R\Delta t - \sigma_s^2)]\delta_{i,j} + [2D_s R\Delta t - \sigma_s^2]\delta_{i,j\pm 1}
+    \]
+    </p>
+    <p><strong>Simplified:</strong></p>
+    <p>
+    \[
+    \alpha_i = 2D_s \Delta t (n_i - 2R) + 2\sigma_s^2 \quad \text{(diagonal)}
+    \]
+    \[
+    \beta = 2D_s R\Delta t - \sigma_s^2 \quad \text{(off-diagonal)}
+    \]
+    </p>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Rotational Covariance Matrix (Eq. 8 analog) <span class="tag tag-rot">Angular</span></h3>
+    <p>
+    \[
+    (\Sigma_\alpha)_{ij} = [2D_\alpha n_i \Delta t - 2(2D_\alpha R\Delta t - \sigma_\alpha^2)]\delta_{i,j} + [2D_\alpha R\Delta t - \sigma_\alpha^2]\delta_{i,j\pm 1}
+    \]
+    </p>
+    <p><strong>Simplified:</strong></p>
+    <p>
+    \[
+    \alpha_i = 2D_\alpha \Delta t (n_i - 2R) + 2\sigma_\alpha^2 \quad \text{(diagonal)}
+    \]
+    \[
+    \beta = 2D_\alpha R\Delta t - \sigma_\alpha^2 \quad \text{(off-diagonal)}
+    \]
+    </p>
+</div>
+
+<div class="equation-box translational">
+    <h3>3D Translational: Sum Over Dimensions <span class="tag tag-trans">Spatial</span></h3>
+    <p>
+    \[
+    L_{\text{total}} = L(\Delta x) + L(\Delta y) + L(\Delta z)
+    \]
+    </p>
+    <p class="note">Apply MLE2 separately to each spatial dimension and sum the log-likelihoods.</p>
+</div>
+
+<!-- ==================== Definitions ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">Definitions & Notation</h3>
+</div>
+
+<div class="equation-box shared">
+    <h3>Variable Definitions</h3>
+    <table>
+        <tr>
+            <th>Translational</th>
+            <th>Rotational</th>
+            <th>Meaning</th>
+            <th>Units</th>
+        </tr>
+        <tr>
+            <td>\(\Delta s_i\)</td>
+            <td>\(\Delta \alpha_i\)</td>
+            <td>Displacement for step \(i\)</td>
+            <td>nm / rad</td>
+        </tr>
+        <tr>
+            <td>\(D_s\)</td>
+            <td>\(D_\alpha\)</td>
+            <td>Diffusion coefficient</td>
+            <td>nm²/s / rad²/s</td>
+        </tr>
+        <tr>
+            <td>\(\sigma_s\)</td>
+            <td>\(\sigma_\alpha\)</td>
+            <td>Localization/orientation precision</td>
+            <td>nm / rad</td>
+        </tr>
+        <tr>
+            <td colspan="2">\(R\)</td>
+            <td>Motion blur coefficient</td>
+            <td>dimensionless</td>
+        </tr>
+        <tr>
+            <td colspan="2">\(n_i\)</td>
+            <td>Frame gap for step \(i\)</td>
+            <td>frames</td>
+        </tr>
+        <tr>
+            <td colspan="2">\(\Delta t\)</td>
+            <td>Frame time</td>
+            <td>seconds</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box shared">
+    <h3>Kronecker Delta (δ)</h3>
+    <p>
+    \[
+    \delta_{i,j} = \begin{cases} 
+    1 & \text{if } i = j \\
+    0 & \text{if } i \neq j
+    \end{cases}
+    \]
+    </p>
+    <p class="note">
+    \(\delta_{i,j}\) selects diagonal elements; \(\delta_{i,j\pm 1}\) selects adjacent off-diagonal elements.
+    </p>
+</div>
+
+<div class="equation-box shared">
+    <h3>Motion Blur Coefficient R (Berglund Eq. 10)</h3>
+    <p>
+    \[
+    R = \frac{1}{\Delta t} \int_0^{\Delta t} S(t)[1 - S(t)] \, dt
+    \]
+    </p>
+    <p>Where \(S(t)\) is the cumulative shutter function (fraction of illumination before time \(t\)).</p>
+    <table>
+        <tr>
+            <th>Illumination Type</th>
+            <th>R Value</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>Stroboscopic/Pulsed</td>
+            <td>\(R = 0\)</td>
+            <td>No motion blur (instantaneous exposure)</td>
+        </tr>
+        <tr>
+            <td>Continuous/Uniform</td>
+            <td>\(R = 1/6\)</td>
+            <td>Most common experimental case</td>
+        </tr>
+        <tr>
+            <td>Double-pulse</td>
+            <td>\(R = 1/4\)</td>
+            <td>Maximum motion blur</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ==================== Angular Displacement ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">Angular Displacement Calculation</h3>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Angular Distance Between Orientations <span class="tag tag-rot">Angular</span></h3>
+    <p>
+    \[
+    \Delta \alpha = \arccos(|\hat{\mu}_1 \cdot \hat{\mu}_2|)
+    \]
+    </p>
+    <p>Where the unit orientation vector is:</p>
+    <p>
+    \[
+    \hat{\mu} = (\sin\theta \cos\phi, \, \sin\theta \sin\phi, \, \cos\theta)
+    \]
+    </p>
+    <p>And the dot product expands to:</p>
+    <p>
+    \[
+    \hat{\mu}_1 \cdot \hat{\mu}_2 = \sin\theta_1 \sin\theta_2 \cos(\phi_1 - \phi_2) + \cos\theta_1 \cos\theta_2
+    \]
+    </p>
+    <p class="note">
+    The absolute value \(|\cdot|\) accounts for head-tail symmetry of the dipole (orientations θ,φ and π-θ,φ+π are equivalent).
+    Range: \(0 \leq \Delta\alpha \leq \pi/2\).
+    </p>
+</div>
+
+<div class="equation-box" style="border-left: 4px solid #f39c12; background: #fef9e7;">
+    <h3>⚠️ Rotational MLE Approximation Note</h3>
+    <p>
+    The rotational MLE formulation assumes angular displacements are <strong>Gaussian-distributed</strong>, which is an approximation. Key limitations:
+    </p>
+    <ul>
+        <li><strong>Small angle approximation:</strong> Valid when \(D_\alpha \cdot \Delta t \ll 1\) rad². For fast rotational diffusion or long time lags, the Gaussian assumption breaks down.</li>
+        <li><strong>Bounded distribution:</strong> Angular distance \(\Delta\alpha\) is bounded to \([0, \pi/2]\) due to head-tail symmetry, unlike true Gaussian distributions which extend to ±∞.</li>
+        <li><strong>Spherical geometry:</strong> Rotational diffusion occurs on a sphere (SO(3) or S²), not in Euclidean space. Rigorous treatment would use wrapped distributions or spherical harmonics.</li>
+    </ul>
+    <p><strong>More rigorous alternatives:</strong></p>
+    <ul>
+        <li>Orientation correlation functions: \(\langle P_2(\cos \Delta\alpha) \rangle = e^{-6D_\alpha t}\) (second Legendre polynomial)</li>
+        <li>Perrin equations for anisotropic rotational diffusion</li>
+        <li>Proper wrapped distributions on the rotation group</li>
+    </ul>
+    <p class="note">
+    For typical single-molecule experiments with \(D_\alpha \sim 0.01-0.1\) rad²/s and \(\Delta t \sim 50\) ms, the Gaussian approximation is reasonable (\(D_\alpha \cdot \Delta t \sim 0.0005-0.005\) rad²).
+    </p>
+</div>
+
+<!-- ==================== Physical Meaning ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">Physical Meaning of Off-Diagonal Terms</h3>
+</div>
+
+<div class="equation-box shared">
+    <h3>Why β = 2DRΔt - σ²?</h3>
+    <p>The off-diagonal term captures two competing effects:</p>
+    <ul>
+        <li><strong>Motion blur correlation (+2DRΔt):</strong> During exposure, the particle's position is time-averaged, creating positive correlation between adjacent measurements.</li>
+        <li><strong>Localization error anti-correlation (-σ²):</strong> Adjacent displacements share a common endpoint. If position \(x_i\) has error \(+\epsilon\):
+            <ul>
+                <li>\(\Delta_{i-1} = x_i - x_{i-1}\) is biased by \(+\epsilon\)</li>
+                <li>\(\Delta_i = x_{i+1} - x_i\) is biased by \(-\epsilon\)</li>
+            </ul>
+            This creates negative covariance.
+        </li>
+    </ul>
+    <p class="note">
+    When \(R = 0\) (no motion blur): \(\beta = -\sigma^2\), recovering the simpler case where only localization error causes correlation.
+    </p>
+</div>
+
+<!-- ==================== References ==================== -->
+<div class="section-header">
+    <h3 style="margin:0;">References</h3>
+</div>
+
+<div class="equation-box">
+    <ul>
+        <li><strong>Bo Shuang et al.</strong> "Improved Analysis for Determining Diffusion Coefficients from Short Single-Molecule Trajectories with Photoblinking." <em>Langmuir</em> 29, 228-234 (2013).</li>
+        <li><strong>Berglund, A.J.</strong> "Statistics of camera-based single-particle tracking." <em>Phys. Rev. E</em> 82, 011917 (2010).</li>
+        <li><strong>Michalet, X. & Berglund, A.J.</strong> "Optimal diffusion coefficient estimation in single-particle tracking." <em>Phys. Rev. E</em> 85, 061916 (2012).</li>
+    </ul>
+</div>
+
+</body>
+</html>

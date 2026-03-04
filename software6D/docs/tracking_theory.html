@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tracking Theory: Kalman Filtering & Diffusion Analysis</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: white;
+            max-width: 1100px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .equation-box {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+        .translational {
+            border-left: 4px solid #3498db;
+        }
+        .rotational {
+            border-left: 4px solid #e74c3c;
+        }
+        .shared {
+            border-left: 4px solid #9b59b6;
+        }
+        .kalman {
+            border-left: 4px solid #27ae60;
+        }
+        .orientation-kalman {
+            border-left: 4px solid #e67e22;
+        }
+        .warning-box {
+            border-left: 4px solid #f39c12;
+            background: #fef9e7;
+        }
+        .comparison-box {
+            border-left: 4px solid #1abc9c;
+            background: #e8f8f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #e74c3c;
+            padding-bottom: 15px;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #e67e22;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .section-header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 30px 0 20px 0;
+        }
+        .section-header h3 {
+            color: white;
+            margin: 0;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+            font-style: italic;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background: #f8f9fa;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .tag-trans { background: #3498db; color: white; }
+        .tag-rot { background: #e74c3c; color: white; }
+        .tag-kalman { background: #27ae60; color: white; }
+        .tag-utrack { background: #8e44ad; color: white; }
+        .tag-software6d { background: #e67e22; color: white; }
+        code {
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin: 15px 0;
+        }
+        .matrix-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .toc {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .toc h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .toc ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .toc li {
+            margin: 8px 0;
+        }
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .flowchart {
+            background: #fff;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .flow-step {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .flow-arrow {
+            display: inline-block;
+            font-size: 24px;
+            color: #7f8c8d;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Tracking Theory: Kalman Filtering & Diffusion Analysis</h1>
+<p>Documentation for software6D tracking pipeline</p>
+
+<!-- Table of Contents -->
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ul>
+        <li><a href="#kalman-overview">1. u-track3D Kalman Filter Overview</a></li>
+        <li><a href="#kalman-matrices">2. Standard Kalman Filter Matrices (F, H, Q, R)</a></li>
+        <li><a href="#utrack-implementation">3. u-track3D Implementation Details</a></li>
+        <li><a href="#orientation-kalman">4. Orientation Pseudo-Kalman Filter (software6D)</a></li>
+        <li><a href="#comparison">5. Comparison: True Kalman vs Pseudo-Kalman</a></li>
+        <li><a href="#mle-equations">6. MLE Diffusion Equations</a></li>
+        <li><a href="#references">7. References</a></li>
+    </ul>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 1: KALMAN OVERVIEW -->
+<!-- ================================================================== -->
+<h2 id="kalman-overview">1. u-track3D Kalman Filter Overview</h2>
+
+<div class="equation-box kalman">
+    <h3>Kalman Filter Purpose <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>The Kalman filter in u-track3D serves two purposes:</p>
+    <ol>
+        <li><strong>State Prediction:</strong> Predict where a particle will be in the next frame based on its current position and velocity</li>
+        <li><strong>Search Region:</strong> Define an adaptive search radius based on uncertainty (noise variance)</li>
+    </ol>
+    <p>The linking cost is <strong>distance²</strong> from predicted position to actual detection, NOT Mahalanobis distance.</p>
+</div>
+
+<div class="flowchart">
+    <div class="flow-step">Initialize<br>State</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">PREDICT<br>(F·x, F·P·Fᵀ+Q)</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">Compute<br>Cost Matrix</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">LAP<br>Linking</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">UPDATE<br>(Kalman Gain)</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">Next<br>Frame</div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 2: STANDARD KALMAN MATRICES -->
+<!-- ================================================================== -->
+<h2 id="kalman-matrices">2. Standard Kalman Filter Matrices</h2>
+
+<div class="equation-box kalman">
+    <h3>State Vector \(\mathbf{x}\) <span class="tag tag-kalman">Kalman</span></h3>
+    <p>For a particle in 2D or 3D space, the state includes position and velocity:</p>
+    <p>
+    \[
+    \mathbf{x}_{2D} = \begin{pmatrix} x \\ y \\ v_x \\ v_y \end{pmatrix}, \quad
+    \mathbf{x}_{3D} = \begin{pmatrix} x \\ y \\ z \\ v_x \\ v_y \\ v_z \end{pmatrix}
+    \]
+    </p>
+    <p class="note">Vector size: <code>vecSize = 2 × probDim</code> (4 for 2D, 6 for 3D)</p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>State Transition Matrix \(\mathbf{F}\) <span class="tag tag-kalman">Kalman</span></h3>
+    <p>u-track3D uses three competing motion models:</p>
+    
+    <p><strong>Model 1 - Forward Drift:</strong> \(\mathbf{x}' = \mathbf{x} + \mathbf{v} \cdot \Delta t\)</p>
+    <p>
+    \[
+    \mathbf{F}_{\text{forward}} = \begin{pmatrix} 
+    1 & 0 & 1 & 0 \\
+    0 & 1 & 0 & 1 \\
+    0 & 0 & 1 & 0 \\
+    0 & 0 & 0 & 1
+    \end{pmatrix} = \mathbf{I} + \begin{pmatrix} 
+    0 & 0 & 1 & 0 \\
+    0 & 0 & 0 & 1 \\
+    0 & 0 & 0 & 0 \\
+    0 & 0 & 0 & 0
+    \end{pmatrix}
+    \]
+    </p>
+    
+    <p><strong>Model 2 - Backward Drift:</strong> \(\mathbf{x}' = \mathbf{x} - \mathbf{v} \cdot \Delta t\)</p>
+    <p>
+    \[
+    \mathbf{F}_{\text{backward}} = \mathbf{I} - \text{diag}(\mathbf{1}, \text{probDim})
+    \]
+    </p>
+    
+    <p><strong>Model 3 - Brownian (Zero Drift):</strong> \(\mathbf{x}' = \mathbf{x}\)</p>
+    <p>
+    \[
+    \mathbf{F}_{\text{brownian}} = \mathbf{I}
+    \]
+    </p>
+    
+    <p class="note">In u-track3D code: <code>transMat(:,:,iScheme)</code></p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Observation Matrix \(\mathbf{H}\) <span class="tag tag-kalman">Kalman</span></h3>
+    <p>Extracts position from state vector (we only observe positions, not velocities):</p>
+    <p>
+    \[
+    \mathbf{H}_{2D} = \begin{pmatrix} 1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \end{pmatrix}, \quad
+    \mathbf{H}_{3D} = \begin{pmatrix} 1 & 0 & 0 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 & 0 & 0 \\ 0 & 0 & 1 & 0 & 0 & 0 \end{pmatrix}
+    \]
+    </p>
+    <p>General form: \(\mathbf{H} = [\mathbf{I}_{\text{probDim}} \,|\, \mathbf{0}]\)</p>
+    <p class="note">In u-track3D code: <code>observationMat = [eye(probDim) zeros(probDim)]</code></p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Process Noise Covariance \(\mathbf{Q}\) <span class="tag tag-kalman">Kalman</span></h3>
+    <p>Represents uncertainty in motion model (diffusion):</p>
+    <p>
+    \[
+    \mathbf{Q} = \text{diag}(\sigma_Q^2, \sigma_Q^2, \ldots) \quad \text{(size: vecSize × vecSize)}
+    \]
+    </p>
+    <p>In u-track3D, initialized as:</p>
+    <p>
+    \[
+    \sigma_Q^2 = \left(\frac{\text{searchRadius}}{\text{brownStdMult}}\right)^2 / \text{probDim}
+    \]
+    </p>
+    <p class="note">In u-track3D code: <code>kalmanFilterInfo.noiseVar</code></p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Measurement Noise Covariance \(\mathbf{R}\) <span class="tag tag-kalman">Kalman</span></h3>
+    <p>Represents localization precision uncertainty:</p>
+    <p>
+    \[
+    \mathbf{R} = \text{diag}(\sigma_x^2, \sigma_y^2, [\sigma_z^2])
+    \]
+    </p>
+    <p>In u-track3D, this is derived from the detection uncertainties in <code>movieInfo.allCoord</code>.</p>
+    <p class="note">In u-track3D code: <code>posVar = frameInfo.allCoord(iFeature,2:2:end).^2</code></p>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 3: U-TRACK IMPLEMENTATION -->
+<!-- ================================================================== -->
+<h2 id="utrack-implementation">3. u-track3D Implementation Details</h2>
+
+<div class="section-header">
+    <h3>PREDICT Step (costMatRandomDirectedSwitchingMotionLink.m)</h3>
+</div>
+
+<div class="equation-box kalman">
+    <h3>State Prediction <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>For each feature and each motion model:</p>
+    <p>
+    \[
+    \hat{\mathbf{x}}_{k+1|k} = \mathbf{F} \cdot \mathbf{x}_k
+    \]
+    </p>
+    <div class="code-block">
+% Line 217 in costMatRandomDirectedSwitchingMotionLink.m
+stateVec = transMat(:,:,iScheme) * stateOld;
+    </div>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Covariance Prediction <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>
+    \[
+    \mathbf{P}_{k+1|k} = \mathbf{F} \cdot \mathbf{P}_k \cdot \mathbf{F}^T + \mathbf{Q}
+    \]
+    </p>
+    <div class="code-block">
+% Lines 219-221 in costMatRandomDirectedSwitchingMotionLink.m
+stateCov = transMat(:,:,iScheme) * stateCovOld * transMat(:,:,iScheme)' ...
+    + noiseVar;
+    </div>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Observation (Predicted Position) <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>
+    \[
+    \hat{\mathbf{y}}_{k+1|k} = \mathbf{H} \cdot \hat{\mathbf{x}}_{k+1|k}
+    \]
+    </p>
+    <div class="code-block">
+% Line 225 in costMatRandomDirectedSwitchingMotionLink.m
+obsVec = observationMat * stateVec;
+    </div>
+</div>
+
+<div class="section-header">
+    <h3>Cost Calculation</h3>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Linking Cost <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>The cost is simply <strong>squared Euclidean distance</strong> from predicted position to actual detection:</p>
+    <p>
+    \[
+    C_{ij} = \|\hat{\mathbf{y}}_i - \mathbf{z}_j\|^2
+    \]
+    </p>
+    <p>Where \(\hat{\mathbf{y}}_i\) is the predicted position and \(\mathbf{z}_j\) is the actual detection in frame 2.</p>
+    <div class="code-block">
+% Lines 247-256 in costMatRandomDirectedSwitchingMotionLink.m
+for iScheme = 1 : numSchemes
+    coord1 = propagatedPos(:,:,iScheme);
+    costMatTmp(:,:,iScheme) = createDistanceMatrix(coord1, coord2);
+end
+[costMat, propagationScheme] = min(costMatTmp, [], 3);  % Best model
+
+% Line 301
+costMat = costMat.^2;  % Square the distance
+    </div>
+    <p class="note"><strong>Important:</strong> This is NOT Mahalanobis distance. The covariance matrix does not directly weight the cost.</p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Search Radius <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>The covariance affects the search radius, not the cost weighting:</p>
+    <p>
+    \[
+    r_{\text{search}} = \text{brownStdMult} \times \sqrt{\text{probDim} \times |\sigma_Q^2|}
+    \]
+    </p>
+    <p>Links beyond the search radius are forbidden (cost = NaN).</p>
+    <div class="code-block">
+% Lines 264-298 in costMatRandomDirectedSwitchingMotionLink.m
+kalmanStd = sqrt(probDim * abs(squeeze(kalmanFilterInfoFrame1.noiseVar(1,1,:))));
+searchRadius = stdMultInd .* kalmanStd;
+searchRadius = max(min(searchRadius, maxSearchRadius), minSearchRadius);
+costMat(costMat > searchRadius) = NaN;
+    </div>
+</div>
+
+<div class="section-header">
+    <h3>UPDATE Step (kalmanGainLinearMotion.m)</h3>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Kalman Gain Calculation <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>After LAP linking determines which features are connected, the Kalman gain is computed:</p>
+    <p>
+    \[
+    \mathbf{K} = \mathbf{P}_{k+1|k} \cdot \mathbf{H}^T \cdot (\mathbf{H} \cdot \mathbf{P}_{k+1|k} \cdot \mathbf{H}^T + \mathbf{R})^{-1}
+    \]
+    </p>
+    <p>Where \(\mathbf{R} = \text{diag}(\sigma_x^2, \sigma_y^2, [\sigma_z^2])\) from detection uncertainties.</p>
+    <div class="code-block">
+% Lines 139-142 in kalmanGainLinearMotion.m
+kalmanGain = stateCovOld * observationMat' / ...
+    (observationMat * stateCovOld * observationMat' + ...
+    diag(eps + frameInfo.allCoord(iFeature,2:2:end).^2));
+    </div>
+    <p class="note">Note: <code>eps</code> is added to avoid division by zero when uncertainties are exactly zero.</p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>State Noise Estimation <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>u-track3D computes the "state noise" (innovation) as:</p>
+    <p>
+    \[
+    \mathbf{w} = \mathbf{K} \cdot (\mathbf{z} - \hat{\mathbf{y}})
+    \]
+    </p>
+    <p>Where \(\mathbf{z}\) is the actual measurement and \(\hat{\mathbf{y}} = \mathbf{H} \cdot \hat{\mathbf{x}}_{k+1|k}\) is the predicted observation.</p>
+    <div class="code-block">
+% Lines 147-148 in kalmanGainLinearMotion.m
+stateNoise = kalmanGain * (frameInfo.allCoord(iFeature,1:2:end)' - obsVecOld);
+kalmanFilterInfoOut(iFrame-1).stateNoise(iFeaturePrev,:) = stateNoise';
+    </div>
+</div>
+
+<div class="equation-box kalman">
+    <h3>State Vector Update <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>
+    \[
+    \mathbf{x}_{k+1} = \hat{\mathbf{x}}_{k+1|k} + \mathbf{w}
+    \]
+    </p>
+    <div class="code-block">
+% Line 151 in kalmanGainLinearMotion.m
+stateVec = stateVecOld + stateNoise;
+    </div>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Covariance Update <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>
+    \[
+    \mathbf{P}_{k+1} = (\mathbf{I} - \mathbf{K} \cdot \mathbf{H}) \cdot \mathbf{P}_{k+1|k}
+    \]
+    </p>
+    <div class="code-block">
+% Line 154 in kalmanGainLinearMotion.m
+stateCov = stateCovOld - kalmanGain * observationMat * stateCovOld;
+    </div>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Adaptive Noise Variance Update <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>u-track3D updates the process noise variance \(\mathbf{Q}\) based on the <strong>history of state noise</strong> along the track:</p>
+    <div class="code-block">
+% Lines 156-175 in kalmanGainLinearMotion.m
+% Find all previous features in this track
+indx = trackedFeatureIndx(iFeature,1:end-1); 
+indxLength = length(find(indx));
+
+% Collect state noise from entire track history
+stateNoiseAll = zeros(indxLength, 2*probDim);
+j = 0;
+for i = iFrame-indxLength : iFrame-1
+    j = j + 1;
+    stateNoiseAll(j,:) = kalmanFilterInfoOut(i).stateNoise(indx(i),:);
+end
+
+% Impose isotropy (all directions equivalent)
+stateNoisePos = stateNoiseAll(:, 1:probDim);
+stateNoiseVel = stateNoiseAll(:, probDim+1:2*probDim);
+
+% Estimate noise variance from track history
+noiseVar = zeros(1, 2*probDim);
+noiseVar(1:probDim) = var(stateNoisePos(:));           % Position noise
+noiseVar(probDim+1:2*probDim) = var(stateNoiseVel(:)); % Velocity noise
+    </div>
+    <p>This makes u-track3D <strong>self-adaptive</strong>: the search radius grows or shrinks based on how well the motion model fits the actual particle behavior.</p>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Position Override <span class="tag tag-utrack">u-track3D</span></h3>
+    <p>Importantly, u-track3D always replaces the estimated position with the <strong>actual measured position</strong>:</p>
+    <div class="code-block">
+% Lines 189-192 in kalmanGainLinearMotion.m
+% Under all circumstances, fill in the real position of each particle
+tmpState = kalmanFilterInfoOut(iFrame).stateVec(iFeature,:);
+tmpState(1:probDim) = frameInfo.allCoord(iFeature,1:2:end);
+kalmanFilterInfoOut(iFrame).stateVec(iFeature,:) = tmpState;
+    </div>
+    <p class="note">This means the Kalman filter is primarily used for <strong>velocity estimation</strong> and <strong>adaptive search radius</strong>, not for smoothing position estimates.</p>
+</div>
+
+<div class="section-header">
+    <h3>Complete Matrix Summary</h3>
+</div>
+
+<div class="equation-box kalman">
+    <h3>All Kalman Matrices in u-track3D <span class="tag tag-utrack">u-track3D</span></h3>
+    <table>
+        <tr>
+            <th>Matrix</th>
+            <th>Symbol</th>
+            <th>Size (2D)</th>
+            <th>Definition</th>
+            <th>Code Variable</th>
+        </tr>
+        <tr>
+            <td><strong>State</strong></td>
+            <td>\(\mathbf{x}\)</td>
+            <td>4×1</td>
+            <td>\([x, y, v_x, v_y]^T\)</td>
+            <td><code>stateVec</code></td>
+        </tr>
+        <tr>
+            <td><strong>State Transition</strong></td>
+            <td>\(\mathbf{F}\)</td>
+            <td>4×4</td>
+            <td>\(\mathbf{I} + \text{diag}(1,1,\text{probDim})\) for forward</td>
+            <td><code>transMat(:,:,iScheme)</code></td>
+        </tr>
+        <tr>
+            <td><strong>State Covariance</strong></td>
+            <td>\(\mathbf{P}\)</td>
+            <td>4×4</td>
+            <td>\(\text{diag}(\sigma_x^2, \sigma_y^2, 4, 4)\) initially</td>
+            <td><code>stateCov</code></td>
+        </tr>
+        <tr>
+            <td><strong>Observation</strong></td>
+            <td>\(\mathbf{H}\)</td>
+            <td>2×4</td>
+            <td>\([\mathbf{I}_2 \,|\, \mathbf{0}_2]\)</td>
+            <td><code>observationMat</code></td>
+        </tr>
+        <tr>
+            <td><strong>Process Noise</strong></td>
+            <td>\(\mathbf{Q}\)</td>
+            <td>4×4</td>
+            <td>\(\text{diag}(\sigma_Q^2, \sigma_Q^2, \sigma_Q^2, \sigma_Q^2)\)</td>
+            <td><code>noiseVar</code></td>
+        </tr>
+        <tr>
+            <td><strong>Measurement Noise</strong></td>
+            <td>\(\mathbf{R}\)</td>
+            <td>2×2</td>
+            <td>\(\text{diag}(\sigma_x^2, \sigma_y^2)\) from detection</td>
+            <td><code>frameInfo.allCoord(:,2:2:end).^2</code></td>
+        </tr>
+        <tr>
+            <td><strong>Kalman Gain</strong></td>
+            <td>\(\mathbf{K}\)</td>
+            <td>4×2</td>
+            <td>\(\mathbf{P}\mathbf{H}^T(\mathbf{H}\mathbf{P}\mathbf{H}^T+\mathbf{R})^{-1}\)</td>
+            <td><code>kalmanGain</code></td>
+        </tr>
+        <tr>
+            <td><strong>State Noise</strong></td>
+            <td>\(\mathbf{w}\)</td>
+            <td>4×1</td>
+            <td>\(\mathbf{K}(\mathbf{z} - \mathbf{H}\hat{\mathbf{x}})\)</td>
+            <td><code>stateNoise</code></td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box kalman">
+    <h3>Complete Algorithm Flow <span class="tag tag-utrack">u-track3D</span></h3>
+    <div class="code-block">
+% === INITIALIZATION (kalmanInitLinearMotion.m) ===
+x = [position; velocity_init]        % State: [x,y,vx,vy] or [x,y,z,vx,vy,vz]
+P = diag([σ²_pos, 4])                % Covariance: detection var + velocity prior
+Q = diag(noiseVarInit)               % Process noise from search radius
+
+% === PREDICT (costMatRandomDirectedSwitchingMotionLink.m) ===
+for each motion model (forward/backward/brownian):
+    x̂ = F * x                        % Predicted state
+    P̂ = F * P * F' + Q               % Predicted covariance
+    ŷ = H * x̂                        % Predicted position (observation)
+
+% === COST CALCULATION ===
+cost = ||ŷ - z||²                    % Distance² to actual detection
+searchRadius = brownStdMult * sqrt(probDim * Q(1,1))
+cost(distance > searchRadius) = NaN  % Forbid distant links
+
+% === LAP LINKING ===
+[link12, link21] = lap(costMat)      % Global optimal assignment
+
+% === UPDATE (kalmanGainLinearMotion.m) ===
+K = P̂ * H' / (H * P̂ * H' + R)        % Kalman gain
+w = K * (z - ŷ)                      % State noise (innovation)
+x_new = x̂ + w                        % Updated state
+P_new = P̂ - K * H * P̂                % Updated covariance
+
+% Adaptive Q update from track history:
+Q_new = diag(var(all_w_in_track))    % Learn noise from past innovations
+
+% Position override:
+x_new(1:probDim) = z                 % Replace with actual measurement
+    </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 4: ORIENTATION PSEUDO-KALMAN -->
+<!-- ================================================================== -->
+<h2 id="orientation-kalman">4. Orientation Kalman Filter (software6D)</h2>
+
+<div class="equation-box orientation-kalman">
+    <h3>Orientation Kalman Levels <span class="tag tag-software6d">software6D</span></h3>
+    <p>The <code>orientKalmanLevel</code> parameter controls the sophistication of orientation tracking:</p>
+    <table>
+        <tr>
+            <th>Level</th>
+            <th>Name</th>
+            <th>Prediction</th>
+            <th>Variance</th>
+            <th>Use Case</th>
+        </tr>
+        <tr>
+            <td><strong>0</strong></td>
+            <td>None</td>
+            <td>—</td>
+            <td>—</td>
+            <td>Spatial only (equivalent to u-track3D)</td>
+        </tr>
+        <tr>
+            <td><strong>1</strong></td>
+            <td>Static</td>
+            <td>μ' = μ</td>
+            <td>Fixed: maxAngDist²</td>
+            <td>Simple baseline, testing</td>
+        </tr>
+        <tr>
+            <td><strong>2</strong></td>
+            <td>Adaptive</td>
+            <td>μ' = μ (Brownian)</td>
+            <td>S = 2D_rot·Δt + 2σ²</td>
+            <td>Free diffusion, most SM experiments</td>
+        </tr>
+        <tr>
+            <td><strong>3</strong></td>
+            <td>Full 3-Model</td>
+            <td>Forward/Backward/Brownian</td>
+            <td>S = 2D_rot·Δt + 2σ²</td>
+            <td>Directed rotation, molecular motors</td>
+        </tr>
+    </table>
+</div>
+
+<div class="section-header">
+    <h3>Level 1: Static Variance (Original Method)</h3>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Simple Normalized Cost <span class="tag tag-software6d">Level 1</span></h3>
+    <p>No physics-based weighting, just normalized angular distance:</p>
+    <p>
+    \[
+    C_{\text{orient}} = \frac{\Delta\alpha^2}{\alpha_{\max}^2}
+    \]
+    </p>
+    <p>Where \(\alpha_{\max}\) = <code>maxAngularDist</code> (default: π/2).</p>
+    <div class="code-block">
+% Level 1: Static variance
+orientNorm = dAngle.^2 / max(maxAngDist^2, eps);
+    </div>
+</div>
+
+<div class="section-header">
+    <h3>Level 2: Adaptive Pseudo-Kalman (Brownian)</h3>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Physics-Based Variance <span class="tag tag-software6d">Level 2</span></h3>
+    <p>Prediction assumes no systematic rotation (Brownian motion):</p>
+    <p>
+    \[
+    \hat{\mu}_{k+1|k} = \mu_k \quad \text{(no change predicted)}
+    \]
+    </p>
+    <p>Cost normalized by expected innovation variance:</p>
+    <p>
+    \[
+    C_{\text{orient}} = \frac{\Delta\alpha^2}{S}, \quad S = 2D_{\alpha}\Delta t + 2\sigma_{\alpha}^2
+    \]
+    </p>
+    <div class="code-block">
+% Level 2: Adaptive Brownian
+P_predicted = 2 * D_rot_prior * dt;           % Process variance
+R_meas = orientCRLB^2;                        % Measurement variance
+S_total = P_predicted + 2 * R_meas;           % Innovation variance
+orientNorm = dAngle.^2 ./ max(S_total, eps);  % Normalized cost
+    </div>
+</div>
+
+<div class="section-header">
+    <h3>Level 3: Full Orientation Kalman (3 Motion Models)</h3>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Three Competing Models <span class="tag tag-software6d">Level 3</span></h3>
+    <p>Like u-track3D's spatial Kalman, we use three motion models:</p>
+    <table>
+        <tr>
+            <th>Model</th>
+            <th>Prediction</th>
+            <th>Physical Meaning</th>
+        </tr>
+        <tr>
+            <td><strong>Forward</strong></td>
+            <td>\(\hat{\mu}' = R(+\omega) \cdot \mu\)</td>
+            <td>Continue rotating same direction</td>
+        </tr>
+        <tr>
+            <td><strong>Backward</strong></td>
+            <td>\(\hat{\mu}' = R(-\omega) \cdot \mu\)</td>
+            <td>Reverse rotation direction</td>
+        </tr>
+        <tr>
+            <td><strong>Brownian</strong></td>
+            <td>\(\hat{\mu}' = \mu\)</td>
+            <td>No systematic rotation</td>
+        </tr>
+    </table>
+    <p>Where \(R(\omega)\) is a rotation matrix and \(\omega\) is estimated from the previous step.</p>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Angular Velocity Estimation <span class="tag tag-software6d">Level 3</span></h3>
+    <p>From two consecutive orientations \(\mu_{k-1}\) and \(\mu_k\), we estimate:</p>
+    <p>
+    \[
+    \text{Rotation axis: } \hat{n} = \frac{\mu_{k-1} \times \mu_k}{|\mu_{k-1} \times \mu_k|}
+    \]
+    \[
+    \text{Rotation angle: } \omega = \arccos(\mu_{k-1} \cdot \mu_k)
+    \]
+    </p>
+    <div class="code-block">
+% Estimate angular velocity from previous step
+crossProd = cross(mu_prev, mu_curr);
+axis = crossProd / norm(crossProd);
+angle = acos(dot(mu_prev, mu_curr));
+
+% Predict under each model
+mu_forward = rotateVector(mu_curr, axis, +angle);   % Continue rotation
+mu_backward = rotateVector(mu_curr, axis, -angle);  % Reverse rotation  
+mu_brownian = mu_curr;                               % No change
+    </div>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Rodrigues' Rotation Formula <span class="tag tag-software6d">Level 3</span></h3>
+    <p>To rotate vector \(\mu\) by angle \(\theta\) about axis \(\hat{n}\):</p>
+    <p>
+    \[
+    \mu' = \mu \cos\theta + (\hat{n} \times \mu) \sin\theta + \hat{n}(\hat{n} \cdot \mu)(1 - \cos\theta)
+    \]
+    </p>
+    <div class="code-block">
+function mu_rot = rotateVector(mu, axis, angle)
+    mu_rot = mu * cos(angle) + ...
+             cross(axis, mu) * sin(angle) + ...
+             axis * dot(axis, mu) * (1 - cos(angle));
+    mu_rot = mu_rot / norm(mu_rot);  % Ensure unit vector
+end
+    </div>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Best Model Selection <span class="tag tag-software6d">Level 3</span></h3>
+    <p>For each track-detection pair, compute cost under all three models and take minimum:</p>
+    <p>
+    \[
+    C_{\text{orient}} = \min\left( \frac{\Delta\alpha_{\text{fwd}}^2}{S}, \frac{\Delta\alpha_{\text{bwd}}^2}{S}, \frac{\Delta\alpha_{\text{brn}}^2}{S} \right)
+    \]
+    </p>
+    <p>The winning model is stored in <code>orientPropagationScheme</code> (1=forward, 2=backward, 3=brownian).</p>
+    <div class="code-block">
+% Compute costs for each scheme
+cost_forward = dAngle_forward.^2 ./ S_total;
+cost_backward = dAngle_backward.^2 ./ S_total;
+cost_brownian = dAngle_brownian.^2 ./ S_total;
+
+% Take minimum
+costStack = cat(3, cost_forward, cost_backward, cost_brownian);
+[orientNorm, orientPropagationScheme] = min(costStack, [], 3);
+    </div>
+</div>
+
+<div class="section-header">
+    <h3>Common Elements (All Levels)</h3>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Orientation State <span class="tag tag-software6d">software6D</span></h3>
+    <p>Orientation represented as unit vector on the sphere:</p>
+    <p>
+    \[
+    \hat{\mu} = (\sin\theta \cos\phi, \sin\theta \sin\phi, \cos\theta)
+    \]
+    </p>
+    <p>Where \(\theta \in [0, \pi]\) is polar angle and \(\phi \in [0, 2\pi)\) is azimuthal angle.</p>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Angular Distance with Head-Tail Symmetry <span class="tag tag-software6d">software6D</span></h3>
+    <p>The angular distance between two orientations:</p>
+    <p>
+    \[
+    \Delta\alpha = \arccos(|\hat{\mu}_1 \cdot \hat{\mu}_2|)
+    \]
+    </p>
+    <p>The absolute value accounts for dipole head-tail symmetry. Range: \([0, \pi/2]\).</p>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Innovation Variance Components <span class="tag tag-software6d">software6D</span></h3>
+    <p>For Levels 2 and 3, the total variance has two components:</p>
+    <p>
+    \[
+    S = \underbrace{2D_\alpha \Delta t}_{\text{Process (Q)}} + \underbrace{2\sigma_\alpha^2}_{\text{Measurement (2R)}}
+    \]
+    </p>
+    <p>Where:</p>
+    <ul>
+        <li>\(D_\alpha\): Rotational diffusion coefficient (<code>D_rot_prior</code>, default: 0.1 rad²/s)</li>
+        <li>\(\Delta t\): Frame time (<code>frameTime</code>, default: 0.05 s)</li>
+        <li>\(\sigma_\alpha\): Orientation CRLB (<code>orientCRLB</code>, default: 5°)</li>
+    </ul>
+    <p class="note">The factor of 2 on R accounts for two independent measurements (current and next frame).</p>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Combined 6D Cost <span class="tag tag-software6d">software6D</span></h3>
+    <p>The total linking cost combines spatial and orientation terms:</p>
+    <p>
+    \[
+    C_{\text{total}} = w_s \cdot C_{\text{spatial}} + w_o \cdot C_{\text{orient}} + w_\Omega \cdot C_{\text{wobble}}
+    \]
+    </p>
+    <div class="code-block">
+% Combined cost (all levels)
+costMat = wSpatial * spatialCost + wOrient * orientNorm + wOmega * omegaNorm;
+    </div>
+</div>
+
+<div class="equation-box warning-box">
+    <h3>⚠️ When to Use Each Level</h3>
+    <table>
+        <tr>
+            <th>Scenario</th>
+            <th>Recommended Level</th>
+            <th>Reason</th>
+        </tr>
+        <tr>
+            <td>Testing/debugging</td>
+            <td>1 (Static)</td>
+            <td>Simplest, no physics assumptions</td>
+        </tr>
+        <tr>
+            <td>Free diffusion in solution</td>
+            <td>2 (Adaptive)</td>
+            <td>Brownian rotation, no drift</td>
+        </tr>
+        <tr>
+            <td>Membrane-bound molecules</td>
+            <td>2 (Adaptive)</td>
+            <td>Constrained but random rotation</td>
+        </tr>
+        <tr>
+            <td>Molecular motors (F1-ATPase)</td>
+            <td>3 (Full)</td>
+            <td>Directed rotation</td>
+        </tr>
+        <tr>
+            <td>DNA unwinding</td>
+            <td>3 (Full)</td>
+            <td>Systematic twist accumulation</td>
+        </tr>
+        <tr>
+            <td>Uncertain/noisy orientations</td>
+            <td>0 (None)</td>
+            <td>Rely on spatial only</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Parameter Summary <span class="tag tag-software6d">software6D</span></h3>
+    <div class="code-block">
+% costMatParam fields for orientation Kalman
+costMatParam.orientKalmanLevel = 2;        % 0=none, 1=static, 2=adaptive, 3=full
+costMatParam.D_rot_prior = 0.1;            % Rotational diffusion coeff (rad²/s)
+costMatParam.orientCRLB = 5 * pi/180;      % Orientation precision (rad)
+costMatParam.frameTime = 0.05;             % Frame time (s)
+costMatParam.useSignalWeighting = false;   % Scale CRLB by 1/sqrt(signal)
+costMatParam.wOrient = 0.3;                % Weight for orientation cost
+costMatParam.wSpatial = 1.0;               % Weight for spatial cost
+    </div>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Expected Angular Variance (Physical Basis) <span class="tag tag-software6d">software6D</span></h3>
+    <p>For small-angle rotational diffusion (Gaussian approximation):</p>
+    <p>
+    \[
+    \text{Var}(\Delta\alpha) = 2D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2
+    \]
+    </p>
+    <p>Where:</p>
+    <ul>
+        <li>\(D_\alpha\): Rotational diffusion coefficient (rad²/s)</li>
+        <li>\(n\): Frame gap (typically 1)</li>
+        <li>\(\Delta t\): Frame time (s)</li>
+        <li>\(\sigma_\alpha\): Orientation measurement precision (rad)</li>
+    </ul>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Orientation Linking Cost <span class="tag tag-software6d">software6D</span></h3>
+    <p>Following the Kalman framework, we scale the angular mismatch by expected variance:</p>
+    <p>
+    \[
+    C_{\text{orient}} = \frac{(\Delta\alpha)^2}{S_{\text{total}}}
+    \]
+    </p>
+    <p>Where:</p>
+    <p>
+    \[
+    S_{\text{total}} = 2D_\alpha \cdot \Delta t + 2\sigma_\alpha^2
+    \]
+    </p>
+    <p>This is analogous to the Mahalanobis distance in a 1D Kalman filter.</p>
+</div>
+
+<div class="equation-box orientation-kalman">
+    <h3>Combined 6D Cost <span class="tag tag-software6d">software6D</span></h3>
+    <p>The total linking cost combines spatial and orientation terms:</p>
+    <p>
+    \[
+    C_{\text{total}} = C_{\text{spatial}} + \lambda \cdot C_{\text{orient}}
+    \]
+    </p>
+    <p>Where \(\lambda\) controls the relative weight of orientation matching.</p>
+    <div class="code-block">
+% In costMat6DSMOLMLink.m
+spatialCost = distance.^2;  % From u-track3D
+orientCost = deltaAlpha.^2 ./ S_total;  % Kalman-like scaling
+totalCost = spatialCost + lambda * orientCost;
+    </div>
+</div>
+
+<div class="equation-box warning-box">
+    <h3>⚠️ Why Not a Full Rotational Kalman Filter?</h3>
+    <p>Several reasons make a true Kalman filter inappropriate for orientation:</p>
+    <ol>
+        <li><strong>No drift prediction:</strong> Brownian rotation has no preferred direction, so \(\mathbf{F} = \mathbf{I}\) and predicted orientation = current orientation.</li>
+        <li><strong>Spherical geometry:</strong> Orientations live on a sphere (S² or SO(3)), not Euclidean space. Standard Kalman assumes Gaussian distributions in ℝⁿ.</li>
+        <li><strong>Head-tail symmetry:</strong> The bounded range \([0, \pi/2]\) violates Gaussian assumptions.</li>
+        <li><strong>No velocity:</strong> Unlike spatial tracking where velocity helps prediction, rotation has no persistent angular velocity to estimate.</li>
+    </ol>
+    <p class="note">The pseudo-Kalman approach captures the essential benefit (variance-scaled costs) while avoiding incorrect assumptions.</p>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 5: COMPARISON -->
+<!-- ================================================================== -->
+<h2 id="comparison">5. Comparison: True Kalman vs Pseudo-Kalman</h2>
+
+<div class="equation-box comparison-box">
+    <h3>Feature Comparison</h3>
+    <table>
+        <tr>
+            <th>Feature</th>
+            <th>u-track3D Spatial Kalman</th>
+            <th>software6D Orientation Pseudo-Kalman</th>
+        </tr>
+        <tr>
+            <td><strong>State vector</strong></td>
+            <td>\([x, y, z, v_x, v_y, v_z]\)</td>
+            <td>\([\theta, \phi]\) (no velocity)</td>
+        </tr>
+        <tr>
+            <td><strong>State prediction</strong></td>
+            <td>\(\hat{\mathbf{x}}' = \mathbf{F} \cdot \mathbf{x}\)</td>
+            <td>None (current = predicted)</td>
+        </tr>
+        <tr>
+            <td><strong>Covariance prediction</strong></td>
+            <td>\(\mathbf{P}' = \mathbf{F}\mathbf{P}\mathbf{F}^T + \mathbf{Q}\)</td>
+            <td>Fixed: \(S = 2D_\alpha\Delta t + 2\sigma_\alpha^2\)</td>
+        </tr>
+        <tr>
+            <td><strong>Kalman update</strong></td>
+            <td>Full update with gain K</td>
+            <td>None</td>
+        </tr>
+        <tr>
+            <td><strong>Cost function</strong></td>
+            <td>Distance² (search radius from σ)</td>
+            <td>\(\Delta\alpha^2 / S\) (variance-scaled)</td>
+        </tr>
+        <tr>
+            <td><strong>Search region</strong></td>
+            <td>Ellipsoidal (from P)</td>
+            <td>Threshold on \(\Delta\alpha\)</td>
+        </tr>
+        <tr>
+            <td><strong>Motion models</strong></td>
+            <td>Forward/Backward/Brownian</td>
+            <td>Brownian only</td>
+        </tr>
+        <tr>
+            <td><strong>Gap closing</strong></td>
+            <td>P grows with gap: \(\mathbf{P} + n\mathbf{Q}\)</td>
+            <td>\(S_n = 2D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2\)</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box comparison-box">
+    <h3>Matrix Correspondence</h3>
+    <table>
+        <tr>
+            <th>Kalman Matrix</th>
+            <th>u-track3D Spatial</th>
+            <th>software6D Orientation</th>
+        </tr>
+        <tr>
+            <td>\(\mathbf{F}\) (transition)</td>
+            <td><code>transMat(:,:,iScheme)</code></td>
+            <td>\(\mathbf{I}\) (identity, implicit)</td>
+        </tr>
+        <tr>
+            <td>\(\mathbf{H}\) (observation)</td>
+            <td><code>[eye(probDim) zeros(probDim)]</code></td>
+            <td>\(\mathbf{I}\) (observe full state)</td>
+        </tr>
+        <tr>
+            <td>\(\mathbf{Q}\) (process noise)</td>
+            <td><code>noiseVar</code></td>
+            <td>\(2D_\alpha\Delta t\) (diffusion variance)</td>
+        </tr>
+        <tr>
+            <td>\(\mathbf{R}\) (measurement noise)</td>
+            <td><code>posVar</code></td>
+            <td>\(\sigma_\alpha^2\) (orientation precision²)</td>
+        </tr>
+        <tr>
+            <td>\(\mathbf{P}\) (state covariance)</td>
+            <td><code>stateCov</code></td>
+            <td>Not tracked (use \(S\) directly)</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 6: MLE EQUATIONS -->
+<!-- ================================================================== -->
+<h2 id="mle-equations">6. MLE Diffusion Equations</h2>
+
+<p>After tracking, diffusion coefficients are estimated using Maximum Likelihood Estimation.</p>
+
+<div class="section-header">
+    <h3>MLE 1: Known Localization Precision (Bo Shuang Eq. 3-4)</h3>
+</div>
+
+<div class="equation-box translational">
+    <h3>Translational MLE 1 <span class="tag tag-trans">Spatial</span></h3>
+    <p><strong>Log-likelihood:</strong></p>
+    <p>
+    \[
+    L(\Delta s) = \sum_{i=1}^{N} \log \left\{ \frac{1}{\sqrt{4\pi D_s n_i \Delta t}} \exp\left(-\frac{\Delta s_i^2}{4 D_s n_i \Delta t}\right) \right\}
+    \]
+    </p>
+    <p><strong>Closed-form estimate:</strong></p>
+    <p>
+    \[
+    D_s^{(1)} = \frac{1}{2N\Delta t} \sum_{i=1}^{N} \frac{\Delta s_i^2}{n_i}
+    \]
+    </p>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Rotational MLE 1 <span class="tag tag-rot">Angular</span></h3>
+    <p><strong>Log-likelihood:</strong></p>
+    <p>
+    \[
+    L(\Delta \alpha) = \sum_{i=1}^{N} \log \left\{ \frac{1}{\sqrt{4\pi D_\alpha n_i \Delta t}} \exp\left(-\frac{\Delta \alpha_i^2}{4 D_\alpha n_i \Delta t}\right) \right\}
+    \]
+    </p>
+    <p><strong>Closed-form estimate:</strong></p>
+    <p>
+    \[
+    D_\alpha^{(1)} = \frac{1}{2N\Delta t} \sum_{i=1}^{N} \frac{\Delta \alpha_i^2}{n_i}
+    \]
+    </p>
+</div>
+
+<div class="section-header">
+    <h3>MLE 2: Joint Estimation with Motion Blur (Bo Shuang Eq. 5-8)</h3>
+</div>
+
+<div class="equation-box shared">
+    <h3>Covariance Matrix Structure (Eq. 8)</h3>
+    <p>
+    \[
+    \Sigma_{ij} = \alpha_i \cdot \delta_{i,j} + \beta \cdot \delta_{i,j\pm 1}
+    \]
+    </p>
+    <p>Where:</p>
+    <p>
+    \[
+    \alpha_i = 2D \cdot \Delta t \cdot (n_i - 2R) + 2\sigma^2 \quad \text{(diagonal)}
+    \]
+    \[
+    \beta = 2DR\Delta t - \sigma^2 \quad \text{(off-diagonal)}
+    \]
+    </p>
+</div>
+
+<div class="equation-box shared">
+    <h3>Motion Blur Coefficient R (Berglund Eq. 10)</h3>
+    <table>
+        <tr>
+            <th>Illumination Type</th>
+            <th>R Value</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>Stroboscopic/Pulsed</td>
+            <td>\(R = 0\)</td>
+            <td>No motion blur</td>
+        </tr>
+        <tr>
+            <td>Continuous/Uniform</td>
+            <td>\(R = 1/6\)</td>
+            <td>Most common case</td>
+        </tr>
+        <tr>
+            <td>Double-pulse</td>
+            <td>\(R = 1/4\)</td>
+            <td>Maximum blur</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box warning-box">
+    <h3>Rotational MLE Approximation Note</h3>
+    <p>The rotational MLE assumes angular displacements are Gaussian-distributed. This approximation is valid when:</p>
+    <ul>
+        <li>\(D_\alpha \cdot \Delta t \ll 1\) rad² (small angles)</li>
+        <li>Typical SM experiments: \(D_\alpha \sim 0.01-0.1\) rad²/s, \(\Delta t \sim 50\) ms → \(D_\alpha \Delta t \sim 0.001\) rad² </li>
+    </ul>
+    <p>For fast rotation or long time lags, use orientation correlation functions instead: \(\langle P_2(\cos\Delta\alpha)\rangle = e^{-6D_\alpha t}\)</p>
+</div>
+
+<div class="section-header">
+    <h3>Rotational Diffusion Simulation</h3>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Geometric Rotational Brownian Dynamics on S² <span class="tag tag-software6d">software6D</span></h3>
+    <p>The simulation uses the geometric integration scheme of <strong>Höfling & Straube, Phys. Rev. Research 7, 043034 (2025)</strong>. 
+    Random rotations are applied in the tangent plane of the current orientation via Rodrigues' formula.</p>
+    
+    <p><strong>Algorithm:</strong></p>
+    <ol>
+        <li>Build orthonormal basis \(\{\mathbf{e}_1, \mathbf{e}_2\}\) for tangent plane at \(\mathbf{u}\)</li>
+        <li>Draw random coefficients \(\xi_1, \xi_2 \sim \mathcal{N}(0, \sigma^2)\) where \(\sigma = \sqrt{2D_\alpha\Delta t}\)</li>
+        <li>Compute rotation vector: \(\delta\boldsymbol{\Omega} = \xi_1 \mathbf{e}_1 + \xi_2 \mathbf{e}_2\)</li>
+        <li>Apply Rodrigues' rotation: \(\mathbf{u}' = \mathbf{u}\cos\theta - (\hat{\mathbf{k}} \times \mathbf{u})\sin\theta + \hat{\mathbf{k}}(\hat{\mathbf{k}}\cdot\mathbf{u})(1-\cos\theta)\)</li>
+    </ol>
+    
+    <p><strong>Advantages:</strong></p>
+    <ul>
+        <li>Avoids coordinate singularities at the poles</li>
+        <li>Preserves \(|\mathbf{u}|=1\) exactly</li>
+        <li>Satisfies detailed balance</li>
+    </ul>
+    
+    <div class="code-block">
+% Geometric Brownian step on sphere
+sigma = sqrt(2 * Drot * dt);  % rad
+e1 = cross(u, [0;0;1]); e1 = e1/norm(e1);
+e2 = cross(u, e1);
+dOmega = sigma*randn*e1 + sigma*randn*e2;
+angle = norm(dOmega);
+u_new = rodrigues_rotate(u, dOmega/angle, angle);
+    </div>
+</div>
+
+<div class="equation-box rotational">
+    <h3>Orientational Confinement (Restoring Potential) <span class="tag tag-software6d">software6D</span></h3>
+    <p>For confined rotational diffusion, a restoring torque biases the dipole toward a preferred axis \(\mathbf{n}_{\text{pref}}\):</p>
+    <p>
+    \[
+    \mathbf{T}_{\text{ext}}(\mathbf{u}) = \kappa \, (\mathbf{u} \times \mathbf{n}_{\text{pref}})
+    \]
+    </p>
+    <p>This derives from the potential \(V(\mathbf{u}) = -\kappa \, (\mathbf{u} \cdot \mathbf{n}_{\text{pref}})\), yielding the 
+    <strong>von Mises-Fisher</strong> equilibrium distribution:</p>
+    <p>
+    \[
+    p(\mathbf{u}) \propto \exp\left(\frac{\kappa}{k_B T} \, \mathbf{u} \cdot \mathbf{n}_{\text{pref}}\right)
+    \]
+    </p>
+    
+    <p>The torque enters the geometric integration as a deterministic bias on the tangent-plane Gaussian mean:</p>
+    <p>
+    \[
+    \mathbf{T}_{\text{eff}} = \frac{\kappa}{k_B T} \cdot D_\alpha \cdot (\mathbf{u} \times \mathbf{n}_{\text{pref}})
+    \]
+    </p>
+    
+    <p><strong>Dimensionless restoring strength \(\kappa/(k_B T)\):</strong></p>
+    <table>
+        <tr><th>Value</th><th>Behavior</th></tr>
+        <tr><td>~0</td><td>Free diffusion (isotropic)</td></tr>
+        <tr><td>~1-3</td><td>Loose alignment (broad von Mises-Fisher)</td></tr>
+        <tr><td>~5-10</td><td>Moderate confinement (~30-45° cone)</td></tr>
+        <tr><td>>10</td><td>Tight alignment (narrow cone)</td></tr>
+    </table>
+    
+    <p class="note">Reference: Höfling & Straube, Phys. Rev. Research 7, 043034 (2025), Eq. (28) and Table I.</p>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 7: BENCHMARKING & PHOTOPHYSICS -->
+<!-- ================================================================== -->
+<h2 id="benchmarking">7. Benchmarking & Photophysics</h2>
+
+<div class="section-header">
+    <h3>Photoblinking Physics</h3>
+</div>
+
+<div class="equation-box">
+    <h3>Relating Simulation Parameters to Experimental Photoblinking</h3>
+    <p>Fluorescent molecules undergo <strong>photoblinking</strong> - stochastic transitions between emissive ("ON") and non-emissive ("OFF") states. The simulation uses <strong>per-frame probabilities</strong>:</p>
+    <ul>
+        <li><code>BlinkOffRate</code> = Probability of turning OFF per frame (when currently ON)</li>
+        <li><code>BlinkOnRate</code> = Probability of turning ON per frame (when currently OFF)</li>
+    </ul>
+    <p><strong>Key relationship:</strong></p>
+    <p>
+    \[
+    \text{BlinkOffRate} \approx \frac{\Delta t}{\tau_{\text{on}}}, \quad \text{BlinkOnRate} \approx \frac{\Delta t}{\tau_{\text{off}}}
+    \]
+    </p>
+    <p>Where \(\tau_{\text{on}}\) = mean ON time, \(\tau_{\text{off}}\) = mean dark state duration, \(\Delta t\) = frame time.</p>
+</div>
+
+<div class="equation-box">
+    <h3>Experimental Timescales for Rhodamine Dyes</h3>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Rhodamine 6G/B</th>
+            <th>Units</th>
+        </tr>
+        <tr>
+            <td>Fluorescence lifetime</td>
+            <td>1.5-4</td>
+            <td>ns</td>
+        </tr>
+        <tr>
+            <td>Triplet lifetime</td>
+            <td>1-10</td>
+            <td>ms</td>
+        </tr>
+        <tr>
+            <td>Dark state lifetime</td>
+            <td>10 ms - 10 s</td>
+            <td>ms-s</td>
+        </tr>
+        <tr>
+            <td>ON time (τ_on)</td>
+            <td>100 ms - 10 s</td>
+            <td>ms-s</td>
+        </tr>
+        <tr>
+            <td>OFF time (τ_off)</td>
+            <td>1 ms - 1 s</td>
+            <td>ms-s</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box">
+    <h3>Example: Rhodamine B in PVA (typical SMOLM conditions)</h3>
+    <ul>
+        <li>τ_on ≈ 500 ms (mean time in ON state)</li>
+        <li>τ_off ≈ 70 ms (mean dark state duration)</li>
+        <li>FrameTime = 50 ms</li>
+    </ul>
+    <div class="code-block">
+BlinkOffRate = 50 ms / 500 ms = 0.10   % 10% chance to turn OFF per frame
+BlinkOnRate  = 50 ms / 70 ms  = 0.71   % 71% chance to turn ON per frame
+    </div>
+    <p class="note">These are the defaults in run_demo.m!</p>
+</div>
+
+<div class="equation-box">
+    <h3>Blinking Parameter Regimes</h3>
+    <table>
+        <tr>
+            <th>Regime</th>
+            <th>BlinkOffRate</th>
+            <th>BlinkOnRate</th>
+            <th>Physical Meaning</th>
+        </tr>
+        <tr>
+            <td>Stable emitter</td>
+            <td>0.01-0.05</td>
+            <td>0.8-0.95</td>
+            <td>Long ON times, quick recovery</td>
+        </tr>
+        <tr>
+            <td>Moderate blinking</td>
+            <td>0.10-0.20</td>
+            <td>0.5-0.7</td>
+            <td>Typical organic dyes</td>
+        </tr>
+        <tr>
+            <td>Heavy blinking</td>
+            <td>0.3-0.5</td>
+            <td>0.3-0.5</td>
+            <td>STORM/PALM probes</td>
+        </tr>
+        <tr>
+            <td>Mostly dark</td>
+            <td>0.5-0.8</td>
+            <td>0.1-0.2</td>
+            <td>Photoactivatable probes</td>
+        </tr>
+    </table>
+</div>
+
+<div class="section-header">
+    <h3>ISBI Challenge & u-track3D Benchmarking Parameters</h3>
+</div>
+
+<div class="equation-box">
+    <h3>ISBI 2012 Particle Tracking Challenge - SNR Levels</h3>
+    <table>
+        <tr>
+            <th>Level</th>
+            <th>SNR Value</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>Very Low</td>
+            <td>1</td>
+            <td>Methods fail significantly</td>
+        </tr>
+        <tr>
+            <td>Low</td>
+            <td>2</td>
+            <td>Challenging detection</td>
+        </tr>
+        <tr>
+            <td><strong>Critical</strong></td>
+            <td><strong>4</strong></td>
+            <td>Threshold where methods break down</td>
+        </tr>
+        <tr>
+            <td>High</td>
+            <td>7</td>
+            <td>Good performance expected</td>
+        </tr>
+    </table>
+    <p class="note"><strong>SNR Definition:</strong> Peak signal above background divided by noise standard deviation</p>
+</div>
+
+<div class="equation-box">
+    <h3>Performance Metrics</h3>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Description</th>
+            <th>Formula</th>
+        </tr>
+        <tr>
+            <td><strong>α (alpha)</strong></td>
+            <td>Detection precision</td>
+            <td>TP / (TP + FP)</td>
+        </tr>
+        <tr>
+            <td><strong>β (beta)</strong></td>
+            <td>Detection recall</td>
+            <td>TP / (TP + FN)</td>
+        </tr>
+        <tr>
+            <td><strong>JSC</strong></td>
+            <td>Jaccard similarity (tracks)</td>
+            <td>Overlap measure</td>
+        </tr>
+        <tr>
+            <td><strong>RMSE</strong></td>
+            <td>Localization error</td>
+            <td>√(mean squared position error)</td>
+        </tr>
+    </table>
+</div>
+
+<div class="section-header">
+    <h3>Recommended Benchmark Test Matrix</h3>
+</div>
+
+<div class="equation-box">
+    <h3>Test 1: SNR Sweep (Localization Noise)</h3>
+    <div class="code-block">
+% Low SNR (challenging)
+'Signal', 500, 'NoiseXY', 50, 'NoiseZ', 100, 'NoiseTheta', 15, 'NoisePhi', 15
+
+% Medium SNR  
+'Signal', 1500, 'NoiseXY', 20, 'NoiseZ', 50, 'NoiseTheta', 5, 'NoisePhi', 5
+
+% High SNR (easy)
+'Signal', 5000, 'NoiseXY', 10, 'NoiseZ', 20, 'NoiseTheta', 2, 'NoisePhi', 2
+    </div>
+</div>
+
+<div class="equation-box">
+    <h3>Test 2: Particle Density Sweep</h3>
+    <div class="code-block">
+% Low density
+'NumParticles', 3, 'FieldOfView', [0 6000 0 6000]
+
+% Medium density
+'NumParticles', 10, 'FieldOfView', [0 6000 0 6000]
+
+% High density
+'NumParticles', 30, 'FieldOfView', [0 6000 0 6000]
+    </div>
+</div>
+
+<div class="equation-box">
+    <h3>Test 3: Blinking Severity Sweep</h3>
+    <div class="code-block">
+% Minimal blinking (stable emitter)
+'BlinkOffRate', 0.02, 'BlinkOnRate', 0.90
+
+% Moderate blinking (default)
+'BlinkOffRate', 0.10, 'BlinkOnRate', 0.70
+
+% Heavy blinking (STORM-like)
+'BlinkOffRate', 0.30, 'BlinkOnRate', 0.40
+    </div>
+</div>
+
+<div class="equation-box">
+    <h3>Test 4: Motion Speed Sweep</h3>
+    <div class="code-block">
+% Slow diffusion
+'Dtrans', 100, 'Drot', 0.01
+
+% Medium diffusion (default)
+'Dtrans', 500, 'Drot', 0.05
+
+% Fast diffusion
+'Dtrans', 2000, 'Drot', 0.20
+    </div>
+</div>
+
+<div class="equation-box">
+    <h3>Suggested Benchmark Scenarios for Publication</h3>
+    <table>
+        <tr>
+            <th>Test ID</th>
+            <th>SNR</th>
+            <th>Density</th>
+            <th>Blinking</th>
+            <th>D_trans</th>
+            <th>D_rot</th>
+            <th>Purpose</th>
+        </tr>
+        <tr>
+            <td>A1</td>
+            <td>High</td>
+            <td>Low</td>
+            <td>Light</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>Baseline/validation</td>
+        </tr>
+        <tr>
+            <td>A2</td>
+            <td>Med</td>
+            <td>Low</td>
+            <td>Light</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>SNR effect</td>
+        </tr>
+        <tr>
+            <td>A3</td>
+            <td>Low</td>
+            <td>Low</td>
+            <td>Light</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>SNR limit</td>
+        </tr>
+        <tr>
+            <td>B1</td>
+            <td>High</td>
+            <td>Med</td>
+            <td>Light</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>Density effect</td>
+        </tr>
+        <tr>
+            <td>B2</td>
+            <td>High</td>
+            <td>High</td>
+            <td>Light</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>Density limit</td>
+        </tr>
+        <tr>
+            <td>C1</td>
+            <td>High</td>
+            <td>Low</td>
+            <td>Heavy</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>Blinking effect</td>
+        </tr>
+        <tr>
+            <td>C2</td>
+            <td>High</td>
+            <td>Low</td>
+            <td>Light</td>
+            <td>2000</td>
+            <td>0.20</td>
+            <td>Fast motion</td>
+        </tr>
+        <tr>
+            <td>D1</td>
+            <td>Med</td>
+            <td>Med</td>
+            <td>Moderate</td>
+            <td>500</td>
+            <td>0.05</td>
+            <td>Realistic conditions</td>
+        </tr>
+    </table>
+</div>
+
+<div class="equation-box">
+    <h3>SNR Calculation for Simulated Data</h3>
+    <p>The effective SNR in our simulation can be approximated as:</p>
+    <p>
+    \[
+    \text{SNR} \approx \frac{\text{Signal}}{\sqrt{\text{Signal} + \sigma_{xy}^2}}
+    \]
+    </p>
+    <p>For <code>Signal=1500, NoiseXY=20</code>: SNR ≈ 1500/√1520 ≈ 38 (very high)</p>
+    <p>To get ISBI-like SNR=4:</p>
+    <div class="code-block">
+'Signal', 200, 'NoiseXY', 50  % SNR ≈ 200/√2700 ≈ 4
+    </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 8: REFERENCES -->
+<!-- ================================================================== -->
+<h2 id="references">8. References</h2>
+
+<div class="equation-box">
+    <h3>Primary Sources</h3>
+    <ul>
+        <li><strong>Jaqaman, K. et al.</strong> "Robust single-particle tracking in live-cell time-lapse sequences." <em>Nature Methods</em> 5, 695-702 (2008). <em>[u-track algorithm]</em></li>
+        <li><strong>Roudot, P. et al.</strong> "u-track3D: Measuring, navigating, and validating dense particle trajectories in three dimensions." <em>Cell Reports Methods</em> 3, 100655 (2023). <em>[u-track3D extension]</em></li>
+        <li><strong>Bo Shuang et al.</strong> "Improved Analysis for Determining Diffusion Coefficients from Short Single-Molecule Trajectories with Photoblinking." <em>Langmuir</em> 29, 228-234 (2013). <em>[MLE equations]</em></li>
+        <li><strong>Berglund, A.J.</strong> "Statistics of camera-based single-particle tracking." <em>Phys. Rev. E</em> 82, 011917 (2010). <em>[Motion blur coefficient R]</em></li>
+        <li><strong>Kalman, R.E.</strong> "A New Approach to Linear Filtering and Prediction Problems." <em>J. Basic Engineering</em> 82, 35-45 (1960). <em>[Kalman filter]</em></li>
+        <li><strong>Chenouard, N. et al.</strong> "Objective comparison of particle tracking methods." <em>Nature Methods</em> 11, 281-289 (2014). <em>[ISBI Challenge]</em></li>
+        <li><strong>Zondervan, R. et al.</strong> "Photoblinking of Rhodamine 6G in Poly(vinyl alcohol)." <em>J. Phys. Chem. A</em> 107, 6770-6776 (2003). <em>[Photophysics]</em></li>
+    </ul>
+</div>
+
+<div class="equation-box">
+    <h3>Code References</h3>
+    <ul>
+        <li><code>costMatRandomDirectedSwitchingMotionLink.m</code> - PREDICT step, cost calculation</li>
+        <li><code>kalmanInitLinearMotion.m</code> - State initialization</li>
+        <li><code>kalmanGainLinearMotion.m</code> - UPDATE step, Kalman gain</li>
+        <li><code>linkFeaturesKalmanSparse.m</code> - Main linking orchestration</li>
+        <li><code>trackCloseGapsKalmanSparse.m</code> - Gap closing with Kalman</li>
+        <li><code>costMat6DSMOLMLink.m</code> - Our 6D extension (software6D)</li>
+    </ul>
+</div>
+
+<hr>
+<p style="color: #666; font-size: 12px; text-align: center;">
+    software6D Documentation | Generated from u-track3D source analysis | February 2026
+</p>
+
+</body>
+</html>
