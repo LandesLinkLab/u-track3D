@@ -24,7 +24,9 @@ function [costMat, propagationScheme, kalmanFilterInfoTmp, nonlinkMarker, ...
 %   
 %   LEVEL 2: ADAPTIVE KALMAN (Brownian, LEARNS D_rot)
 %       - Prediction: μ' = μ (Brownian assumption)
-%       - Variance: S = 2·D_rot·Δt + 2·σ_meas² 
+%       - Variance: S = 4·D_rot·Δt + 2·σ_meas²
+%         (factor of 4 because angular distance involves two independent
+%          tangent-plane components, each with variance 2·D_rot·Δt)
 %       - D_rot is LEARNED from track history (like u-track3D spatial)
 %       - Falls back to D_rot_prior for new tracks
 %   
@@ -39,9 +41,9 @@ function [costMat, propagationScheme, kalmanFilterInfoTmp, nonlinkMarker, ...
 %   
 %   ADAPTIVE LEARNING (Levels 2 & 3):
 %       After linking, angular innovations are stored in kalmanFilterInfoTmp.
-%       D_rot is estimated from the variance of angular displacements:
-%           Var(Δα) = 2·D_rot·Δt + 2·σ²
-%           D_rot_estimated = (Var(Δα) - 2·σ²) / (2·Δt)
+%       D_rot is estimated from mean squared angular displacements:
+%           E[Δα²] = 4·D_rot·Δt + 2·σ²
+%           D_rot_estimated = (mean(Δα²) - 2·σ²) / (4·Δt)
 %
 %   See docs/tracking_theory.html for full details.
 %   =========================================================================
@@ -267,61 +269,66 @@ if doOrientMod && orientKalmanLevel >= 2
     angVel_perTrack = zeros(nOrientRows, 3);  % Angular velocity for Level 3
     
     if ~isempty(trackedFeatureIndx) && size(trackedFeatureIndx, 2) >= 2
+        nFramesCols = size(trackedFeatureIndx, 2);
         for iTrack = 1:min(nOrientRows, size(trackedFeatureIndx, 1))
-            % Get track history indices
-            trackHist = trackedFeatureIndx(iTrack, :);
-            trackHist = trackHist(trackHist > 0);  % Remove zeros
-            trackLen = length(trackHist);
-            
+            % Iterate directly over frame columns to avoid detection index
+            % ambiguity. trackedFeatureIndx(iTrack, frameCol) gives the
+            % detection index at frame frameCol (0 = not present).
+            muHistory = zeros(nFramesCols, 3);
+            frameList = zeros(nFramesCols, 1);
+            count = 0;
+
+            for frameCol = 1:nFramesCols
+                detIdx = trackedFeatureIndx(iTrack, frameCol);
+                if detIdx > 0 && frameCol <= length(movieInfo) && ...
+                   ~isempty(movieInfo(frameCol).theta) && ...
+                   detIdx <= size(movieInfo(frameCol).theta, 1)
+
+                    count = count + 1;
+                    th = movieInfo(frameCol).theta(detIdx, 1);
+                    ph = movieInfo(frameCol).phi(detIdx, 1);
+                    muHistory(count, :) = angles2mu(th, ph);
+                    frameList(count) = frameCol;
+                end
+            end
+
+            % Trim to actual entries
+            muHistory = muHistory(1:count, :);
+            frameList = frameList(1:count);
+            trackLen = count;
+
             if trackLen >= minHistoryForAdaptive
-                % Collect angular displacements from track history
+                % Compute angular displacements between consecutive detections
                 angularDisplacements = [];
-                muHistory = zeros(trackLen, 3);
-                
-                for h = 1:trackLen
-                    histFrame = find(trackedFeatureIndx(iTrack, :) == trackHist(h), 1);
-                    if ~isempty(histFrame) && histFrame <= length(movieInfo) && ...
-                       ~isempty(movieInfo(histFrame).theta) && ...
-                       trackHist(h) <= size(movieInfo(histFrame).theta, 1)
-                        
-                        th = movieInfo(histFrame).theta(trackHist(h), 1);
-                        ph = movieInfo(histFrame).phi(trackHist(h), 1);
-                        muHistory(h, :) = angles2mu(th, ph);
-                    end
-                end
-                
-                % Compute angular displacements between consecutive frames
                 for h = 2:trackLen
-                    if all(muHistory(h,:) ~= 0) && all(muHistory(h-1,:) ~= 0)
-                        dAlpha = angularDistanceVectors(muHistory(h-1,:)', muHistory(h,:)');
-                        angularDisplacements = [angularDisplacements; dAlpha];
-                    end
+                    dAlpha = angularDistanceVectors(muHistory(h-1,:)', muHistory(h,:)');
+                    angularDisplacements = [angularDisplacements; dAlpha]; %#ok<AGROW>
                 end
-                
-                % Estimate D_rot from variance of angular displacements
-                % Var(Δα) = 2*D_rot*dt + 2*σ²
-                % D_rot = (Var(Δα) - 2*σ²) / (2*dt)
+
+                % Estimate D_rot from mean squared angular displacements.
+                % E[dAngle^2] = 4*D_rot*dt + 2*sigma^2  (two tangent-plane
+                % components each with variance 2*D_rot*dt, plus measurement
+                % noise from both endpoints).
+                % D_rot = (mean(dAngle^2) - 2*sigma^2) / (4*dt)
                 if length(angularDisplacements) >= 2
-                    varObs = var(angularDisplacements);
-                    D_rot_est = (varObs - 2*orientCRLB^2) / (2*frameTime);
+                    meanSqDisp = mean(angularDisplacements.^2);
+                    D_rot_est = (meanSqDisp - 2*orientCRLB^2) / (4*frameTime);
                     D_rot_est = max(D_rot_est, 0.001);  % Ensure positive
                     D_rot_est = min(D_rot_est, 10 * D_rot_prior);  % Cap at 10x prior
                     D_rot_perTrack(iTrack) = D_rot_est;
-                    
+
                     if saveCostMat && iFrame == costMatSaveFrame && iTrack <= 3
                         fprintf('  [costMat6DSMOLMLink] Track %d: D_rot_learned = %.4f rad²/s (from %d displacements)\n', ...
                             iTrack, D_rot_est, length(angularDisplacements));
                     end
                 end
-                
+
                 % For Level 3: estimate angular velocity from last two frames
                 if orientKalmanLevel == 3 && trackLen >= 2
                     mu_prev = muHistory(end-1, :)';
                     mu_curr = muHistory(end, :)';
-                    if all(mu_prev ~= 0) && all(mu_curr ~= 0)
-                        [axis, angle] = estimateAngularVelocity(mu_prev, mu_curr);
-                        angVel_perTrack(iTrack, :) = axis' * angle;  % axis-angle representation
-                    end
+                    [axis, angle] = estimateAngularVelocity(mu_prev, mu_curr);
+                    angVel_perTrack(iTrack, :) = axis' * angle;  % axis-angle representation
                 end
             end
         end
@@ -356,21 +363,23 @@ if doOrientMod
             R_meas = computeMeasurementVariance(orientCRLB, useSignalWeighting, ...
                 movieInfo, iFrame, nextFrame, nOrientRows, nOrientCols);
             
-            % Process variance using LEARNED D_rot per track
-            % P_predicted is now a matrix [nOrientRows x nOrientCols]
+            % Process variance using LEARNED D_rot per track.
+            % Angular distance measures the total rotation angle on S^2,
+            % involving two independent tangent-plane components each with
+            % variance 2*D_rot*dt, so E[dAngle^2] = 4*D_rot*dt.
             P_predicted = zeros(nOrientRows, nOrientCols);
             for i = 1:nOrientRows
-                P_predicted(i, :) = 2 * D_rot_perTrack(i) * dt;
+                P_predicted(i, :) = 4 * D_rot_perTrack(i) * dt;
             end
-            
+
             % Total variance (innovation covariance)
             S_total = P_predicted + 2 * R_meas;
-            
+
             % Normalized cost
             orientNorm = dAngle.^2 ./ max(S_total, eps);
-            
+
             % Wobble cost (use mean D_rot)
-            S_wobble = 2 * mean(D_rot_perTrack) * dt + 2 * (0.1)^2;
+            S_wobble = 4 * mean(D_rot_perTrack) * dt + 2 * (0.1)^2;
             omegaNorm = dOmegaVal.^2 ./ max(S_wobble, eps);
             
             if saveCostMat && iFrame == costMatSaveFrame
@@ -390,10 +399,11 @@ if doOrientMod
             R_meas = computeMeasurementVariance(orientCRLB, useSignalWeighting, ...
                 movieInfo, iFrame, nextFrame, nOrientRows, nOrientCols);
             
-            % Process variance using LEARNED D_rot per track
+            % Process variance using LEARNED D_rot per track.
+            % Two tangent-plane components: E[dAngle^2] = 4*D_rot*dt.
             P_predicted = zeros(nOrientRows, nOrientCols);
             for i = 1:nOrientRows
-                P_predicted(i, :) = 2 * D_rot_perTrack(i) * dt;
+                P_predicted(i, :) = 4 * D_rot_perTrack(i) * dt;
             end
             S_total = P_predicted + 2 * R_meas;
             
@@ -441,7 +451,7 @@ if doOrientMod
             
             % Wobble cost
             [~, dOmegaVal] = computeAngularDistanceMatrix(muCurr, muNext, omegaCurr, omegaNext);
-            S_wobble = 2 * mean(D_rot_perTrack) * dt + 2 * (0.1)^2;
+            S_wobble = 4 * mean(D_rot_perTrack) * dt + 2 * (0.1)^2;
             omegaNorm = dOmegaVal.^2 ./ max(S_wobble, eps);
             dAngle = dAngle_brownian;  % For reporting
             
@@ -655,13 +665,16 @@ function [axis, angle] = estimateAngularVelocity(mu_prev, mu_curr)
 end
 
 function mu_rot = rotateVector(mu, axis, angle)
-%ROTATEVECTOR Rotate vector using Rodrigues' formula
+%ROTATEVECTOR Rotate vector using Rodrigues' formula.
+%   Uses the Höfling & Straube (2025) sign convention to match the
+%   simulation in generate6DTrajectories.m:
+%     v_rot = v*cos(a) - (k x v)*sin(a) + k*(k.v)*(1-cos(a))
     if abs(angle) < 1e-10
         mu_rot = mu;
         return;
     end
-    
-    mu_rot = mu * cos(angle) + ...
+
+    mu_rot = mu * cos(angle) - ...
              cross(axis, mu) * sin(angle) + ...
              axis * dot(axis, mu) * (1 - cos(angle));
     mu_rot = mu_rot / norm(mu_rot);

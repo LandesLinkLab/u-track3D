@@ -59,7 +59,7 @@ C_orient = α² / (P_predicted + R_meas)
 
 Where:
 - `α` = angular displacement between orientations (radians)
-- `P_predicted = 2 × D_rot × Δt` = expected angular variance from diffusion
+- `P_predicted = 4 × D_rot × Δt` = expected angular variance from diffusion (two tangent-plane components)
 - `R_meas = σ_CRLB²` = measurement variance
 
 This is analogous to the Kalman innovation cost:
@@ -74,7 +74,7 @@ Where `S = P_predicted + R_meas` is the innovation covariance.
 |-----------|---------|---------------|
 | `D_rot` | Rotational diffusion coefficient | 0.01-0.1 rad²/s |
 | `Δt` | Frame time | 0.05 s (50 ms) |
-| `P_predicted` | Expected angular spread | 2×0.05×0.05 = 0.005 rad² |
+| `P_predicted` | Expected angular spread | 4×0.05×0.05 = 0.010 rad² |
 | `σ_CRLB` | Measurement uncertainty | 5° ≈ 0.087 rad |
 | `R_meas` | Measurement variance | 0.087² ≈ 0.0076 rad² |
 
@@ -98,8 +98,8 @@ Where `S = P_predicted + R_meas` is the innovation covariance.
 
 | Scenario | Direct Mode | Pseudo-Kalman |
 |----------|-------------|---------------|
-| Small angular change (0.1 rad) | 0.1²/(π/2)² = 0.004 | 0.1²/(0.005+0.008) = 0.77 |
-| Large angular change (0.5 rad) | 0.5²/(π/2)² = 0.10 | 0.5²/(0.005+0.008) = 19.2 |
+| Small angular change (0.1 rad) | 0.1²/(π/2)² = 0.004 | 0.1²/(0.010+0.008) = 0.56 |
+| Large angular change (0.5 rad) | 0.5²/(π/2)² = 0.10 | 0.5²/(0.010+0.008) = 13.9 |
 | **Ratio** | 25× | 25× |
 
 The ratio is similar, but pseudo-Kalman provides:
@@ -134,7 +134,7 @@ The absolute value `|·|` enforces that μ̂ and -μ̂ are equivalent (dipole sy
 
 The expected mean squared angular displacement follows:
 ```
-⟨Δψ²⟩ = 2 D_rot Δt + 2 σ_ψ²
+⟨Δψ²⟩ = 4 D_rot Δt + 2 σ_ψ²
 ```
 Where:
 - `D_rot` = rotational diffusion coefficient (rad²/s)
@@ -154,7 +154,7 @@ d_angle_scaled = d_angle / √(timeGap)
 
 ### Time-Gap Scaling (Pseudo-Kalman Mode)
 ```
-P_predicted = 2 × D_rot × (timeGap × dt)
+P_predicted = 4 × D_rot × (timeGap × dt)
 ```
 
 The variance grows linearly with time gap, naturally accounting for expected diffusion.
@@ -191,9 +191,9 @@ The pseudo-Kalman approach is a stepping stone to full orientation Kalman filter
 - Innovation-based outlier rejection
 
 ### Current Limitations
-- No angular velocity tracking (assumes D_rot dominates)
-- Single D_rot_prior for all particles
-- No track history used (stateless)
+- No angular velocity tracking (assumes D_rot dominates) — Level 3 provides partial support
+- D_rot_prior used as fallback for tracks shorter than `minHistoryForAdaptive` frames
+- Levels 2 & 3 learn per-track D_rot from track history (adaptive)
 
 ---
 

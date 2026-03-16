@@ -658,14 +658,14 @@ x_new(1:probDim) = z                 % Replace with actual measurement
             <td><strong>2</strong></td>
             <td>Adaptive</td>
             <td>μ' = μ (Brownian)</td>
-            <td>S = 2D_rot·Δt + 2σ²</td>
+            <td>S = 4D_rot·Δt + 2σ²</td>
             <td>Free diffusion, most SM experiments</td>
         </tr>
         <tr>
             <td><strong>3</strong></td>
             <td>Full 3-Model</td>
             <td>Forward/Backward/Brownian</td>
-            <td>S = 2D_rot·Δt + 2σ²</td>
+            <td>S = 4D_rot·Δt + 2σ²</td>
             <td>Directed rotation, molecular motors</td>
         </tr>
     </table>
@@ -705,12 +705,12 @@ orientNorm = dAngle.^2 / max(maxAngDist^2, eps);
     <p>Cost normalized by expected innovation variance:</p>
     <p>
     \[
-    C_{\text{orient}} = \frac{\Delta\alpha^2}{S}, \quad S = 2D_{\alpha}\Delta t + 2\sigma_{\alpha}^2
+    C_{\text{orient}} = \frac{\Delta\alpha^2}{S}, \quad S = 4D_{\alpha}\Delta t + 2\sigma_{\alpha}^2
     \]
     </p>
     <div class="code-block">
 % Level 2: Adaptive Brownian
-P_predicted = 2 * D_rot_prior * dt;           % Process variance
+P_predicted = 4 * D_rot * dt;                 % Process variance (2 tangent-plane components)
 R_meas = orientCRLB^2;                        % Measurement variance
 S_total = P_predicted + 2 * R_meas;           % Innovation variance
 orientNorm = dAngle.^2 ./ max(S_total, eps);  % Normalized cost
@@ -775,15 +775,16 @@ mu_brownian = mu_curr;                               % No change
 
 <div class="equation-box orientation-kalman">
     <h3>Rodrigues' Rotation Formula <span class="tag tag-software6d">Level 3</span></h3>
-    <p>To rotate vector \(\mu\) by angle \(\theta\) about axis \(\hat{n}\):</p>
+    <p>To rotate vector \(\mu\) by angle \(\theta\) about axis \(\hat{n}\), using the
+    Höfling & Straube (2025) sign convention (consistent with the simulation):</p>
     <p>
     \[
-    \mu' = \mu \cos\theta + (\hat{n} \times \mu) \sin\theta + \hat{n}(\hat{n} \cdot \mu)(1 - \cos\theta)
+    \mu' = \mu \cos\theta - (\hat{n} \times \mu) \sin\theta + \hat{n}(\hat{n} \cdot \mu)(1 - \cos\theta)
     \]
     </p>
     <div class="code-block">
 function mu_rot = rotateVector(mu, axis, angle)
-    mu_rot = mu * cos(angle) + ...
+    mu_rot = mu * cos(angle) - ...
              cross(axis, mu) * sin(angle) + ...
              axis * dot(axis, mu) * (1 - cos(angle));
     mu_rot = mu_rot / norm(mu_rot);  % Ensure unit vector
@@ -843,7 +844,7 @@ costStack = cat(3, cost_forward, cost_backward, cost_brownian);
     <p>For Levels 2 and 3, the total variance has two components:</p>
     <p>
     \[
-    S = \underbrace{2D_\alpha \Delta t}_{\text{Process (Q)}} + \underbrace{2\sigma_\alpha^2}_{\text{Measurement (2R)}}
+    S = \underbrace{4D_\alpha \Delta t}_{\text{Process (Q): two tangent-plane components}} + \underbrace{2\sigma_\alpha^2}_{\text{Measurement (2R)}}
     \]
     </p>
     <p>Where:</p>
@@ -929,7 +930,7 @@ costMatParam.wSpatial = 1.0;               % Weight for spatial cost
     <p>For small-angle rotational diffusion (Gaussian approximation):</p>
     <p>
     \[
-    \text{Var}(\Delta\alpha) = 2D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2
+    \text{Var}(\Delta\alpha) = 4D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2
     \]
     </p>
     <p>Where:</p>
@@ -952,7 +953,7 @@ costMatParam.wSpatial = 1.0;               % Weight for spatial cost
     <p>Where:</p>
     <p>
     \[
-    S_{\text{total}} = 2D_\alpha \cdot \Delta t + 2\sigma_\alpha^2
+    S_{\text{total}} = 4D_\alpha \cdot \Delta t + 2\sigma_\alpha^2
     \]
     </p>
     <p>This is analogous to the Mahalanobis distance in a 1D Kalman filter.</p>
@@ -1013,7 +1014,7 @@ totalCost = spatialCost + lambda * orientCost;
         <tr>
             <td><strong>Covariance prediction</strong></td>
             <td>\(\mathbf{P}' = \mathbf{F}\mathbf{P}\mathbf{F}^T + \mathbf{Q}\)</td>
-            <td>Fixed: \(S = 2D_\alpha\Delta t + 2\sigma_\alpha^2\)</td>
+            <td>Fixed: \(S = 4D_\alpha\Delta t + 2\sigma_\alpha^2\)</td>
         </tr>
         <tr>
             <td><strong>Kalman update</strong></td>
@@ -1038,7 +1039,7 @@ totalCost = spatialCost + lambda * orientCost;
         <tr>
             <td><strong>Gap closing</strong></td>
             <td>P grows with gap: \(\mathbf{P} + n\mathbf{Q}\)</td>
-            <td>\(S_n = 2D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2\)</td>
+            <td>\(S_n = 4D_\alpha \cdot n \cdot \Delta t + 2\sigma_\alpha^2\)</td>
         </tr>
     </table>
 </div>
@@ -1064,7 +1065,7 @@ totalCost = spatialCost + lambda * orientCost;
         <tr>
             <td>\(\mathbf{Q}\) (process noise)</td>
             <td><code>noiseVar</code></td>
-            <td>\(2D_\alpha\Delta t\) (diffusion variance)</td>
+            <td>\(4D_\alpha\Delta t\) (diffusion variance, two tangent-plane components)</td>
         </tr>
         <tr>
             <td>\(\mathbf{R}\) (measurement noise)</td>

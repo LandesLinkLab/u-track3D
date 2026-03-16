@@ -29,7 +29,7 @@
 %  orientKalmanLevel : Controls sophistication of orientation tracking
 %                      0 = No orientation cost (spatial only, like u-track3D)
 %                      1 = Static variance (Δα²/maxAngDist², original method)
-%                      2 = Adaptive pseudo-Kalman (Brownian: Δα²/S, S=2D·dt+2σ²)
+%                      2 = Adaptive pseudo-Kalman (Brownian: Δα²/S, S=4D·dt+2σ²)
 %                      3 = Full 3-model Kalman (forward/backward/Brownian rotation)
 %                      Default: 2
 %  D_rot_prior     : Prior estimate of rotational diffusion coefficient [rad²/s]
@@ -209,7 +209,7 @@ gapWeights.wOmega   = 0.0;       % Weight for wobble cost
 %  Choose orientation Kalman level:
 %    Level 0: No orientation cost (spatial only, equivalent to u-track3D)
 %    Level 1: Static variance (simple Δα²/maxAngDist², original method)
-%    Level 2: Adaptive pseudo-Kalman (Brownian, Δα²/S where S=2D·dt+2σ²)
+%    Level 2: Adaptive pseudo-Kalman (Brownian, Δα²/S where S=4D·dt+2σ²)
 %    Level 3: Full 3-model Kalman (forward/backward/Brownian rotation)
 %
 %  Parameters for Levels 2 & 3:
