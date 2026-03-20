@@ -66,6 +66,12 @@ function [costMat, propagationScheme, kalmanFilterInfoTmp, nonlinkMarker, ...
 %     orientCRLB       : Orientation measurement uncertainty, rad (default: 5°).
 %     frameTime        : Time between frames, seconds (default: 0.05).
 %     useSignalWeighting : Scale orientCRLB by 1/sqrt(signal) (default: false).
+%     useOmegaWeighting  : Scale measurement noise by 1/gamma(omega) so that
+%                          wobbling molecules get a larger angular search
+%                          window. gamma is the order parameter derived from
+%                          the wobble solid angle omega (default: true).
+%     gammaFloor         : Minimum gamma value to avoid divergent noise for
+%                          highly wobbling molecules (default: 0.15).
 %     minHistoryForAdaptive : Min track length to use adaptive D_rot (default: 3).
 %
 %     --- Diagnostic/save parameters ---
@@ -114,6 +120,8 @@ D_rot_prior = getFieldOrDefault(costMatParam, 'D_rot_prior', 0.1);  % rad²/s
 orientCRLB = getFieldOrDefault(costMatParam, 'orientCRLB', 5 * pi/180);  % 5 degrees default
 frameTime = getFieldOrDefault(costMatParam, 'frameTime', 0.05);  % 50 ms default
 useSignalWeighting = getFieldOrDefault(costMatParam, 'useSignalWeighting', false);
+useOmegaWeighting = getFieldOrDefault(costMatParam, 'useOmegaWeighting', true);
+gammaFloor = getFieldOrDefault(costMatParam, 'gammaFloor', 0.15);
 minHistoryForAdaptive = getFieldOrDefault(costMatParam, 'minHistoryForAdaptive', 3);
 
 % Diagnostic/save parameters
@@ -358,11 +366,17 @@ if doOrientMod
             % LEVEL 2: ADAPTIVE KALMAN (Brownian, LEARNS D_rot)
             % =================================================================
             [dAngle, dOmegaVal] = computeAngularDistanceMatrix(muCurr, muNext, omegaCurr, omegaNext);
-            
-            % Measurement variance
-            R_meas = computeMeasurementVariance(orientCRLB, useSignalWeighting, ...
-                movieInfo, iFrame, nextFrame, nOrientRows, nOrientCols);
-            
+
+            % Measurement variance — per-detection, modulated by omega.
+            % When useOmegaWeighting is true, each detection's measurement
+            % noise is scaled by 1/gamma(omega)^2: wobbling molecules have
+            % larger effective angular uncertainty because the camera
+            % integrates over many orientations within the wobble cone.
+            [R_curr, R_next] = computeMeasurementVariance(orientCRLB, ...
+                useSignalWeighting, movieInfo, iFrame, nextFrame, ...
+                nOrientRows, nOrientCols, useOmegaWeighting, ...
+                omegaCurr, omegaNext, gammaFloor);
+
             % Process variance using LEARNED D_rot per track.
             % Angular distance measures the total rotation angle on S^2,
             % involving two independent tangent-plane components each with
@@ -372,8 +386,10 @@ if doOrientMod
                 P_predicted(i, :) = 4 * D_rot_perTrack(i) * dt;
             end
 
-            % Total variance (innovation covariance)
-            S_total = P_predicted + 2 * R_meas;
+            % Total variance (innovation covariance).
+            % S = P_process + R_curr(i) + R_next(j), where each R depends
+            % on that detection's omega via the order parameter gamma.
+            S_total = P_predicted + R_curr + R_next;
 
             % Normalized cost
             orientNorm = dAngle.^2 ./ max(S_total, eps);
@@ -381,31 +397,38 @@ if doOrientMod
             % Wobble cost (use mean D_rot)
             S_wobble = 4 * mean(D_rot_perTrack) * dt + 2 * (0.1)^2;
             omegaNorm = dOmegaVal.^2 ./ max(S_wobble, eps);
-            
+
             if saveCostMat && iFrame == costMatSaveFrame
                 fprintf('  [costMat6DSMOLMLink] LEVEL 2 (Adaptive Brownian):\n');
                 fprintf('    D_rot: mean=%.4f, range=[%.4f, %.4f] rad²/s\n', ...
                     mean(D_rot_perTrack), min(D_rot_perTrack), max(D_rot_perTrack));
                 fprintf('    S_total: mean=%.6f rad² (sqrt=%.2f°)\n', ...
                     mean(S_total(:)), sqrt(mean(S_total(:)))*180/pi);
+                if useOmegaWeighting
+                    gammaCurr = omegaToGamma(omegaCurr, gammaFloor);
+                    fprintf('    Omega weighting ON: gamma range=[%.3f, %.3f]\n', ...
+                        min(gammaCurr), max(gammaCurr));
+                end
             end
             
         case 3
             % =================================================================
             % LEVEL 3: FULL ADAPTIVE KALMAN (3 motion models)
             % =================================================================
-            
-            % Measurement variance
-            R_meas = computeMeasurementVariance(orientCRLB, useSignalWeighting, ...
-                movieInfo, iFrame, nextFrame, nOrientRows, nOrientCols);
-            
+
+            % Measurement variance — omega-modulated per detection
+            [R_curr, R_next] = computeMeasurementVariance(orientCRLB, ...
+                useSignalWeighting, movieInfo, iFrame, nextFrame, ...
+                nOrientRows, nOrientCols, useOmegaWeighting, ...
+                omegaCurr, omegaNext, gammaFloor);
+
             % Process variance using LEARNED D_rot per track.
             % Two tangent-plane components: E[dAngle^2] = 4*D_rot*dt.
             P_predicted = zeros(nOrientRows, nOrientCols);
             for i = 1:nOrientRows
                 P_predicted(i, :) = 4 * D_rot_perTrack(i) * dt;
             end
-            S_total = P_predicted + 2 * R_meas;
+            S_total = P_predicted + R_curr + R_next;
             
             % Initialize cost matrices for each scheme
             dAngle_forward = zeros(nOrientRows, nOrientCols);
@@ -611,27 +634,65 @@ function dAlpha = angularDistanceVectors(mu1, mu2)
     dAlpha = acos(min(abs(dotProd), 1));
 end
 
-function R_meas = computeMeasurementVariance(orientCRLB, useSignalWeighting, ...
-    movieInfo, iFrame, nextFrame, nRows, nCols)
-%COMPUTEMEASUREMENTVARIANCE Compute measurement variance matrix
-    
+function [R_curr, R_next] = computeMeasurementVariance(orientCRLB, ...
+    useSignalWeighting, movieInfo, iFrame, nextFrame, nRows, nCols, ...
+    useOmegaWeighting, omegaCurr, omegaNext, gammaFloor)
+%COMPUTEMEASUREMENTVARIANCE Compute per-detection measurement variance.
+%
+%   Returns separate R_curr [nRows x nCols] and R_next [nRows x nCols]
+%   matrices so that the total measurement contribution to innovation
+%   variance is S = P_process + R_curr + R_next.
+%
+%   When useOmegaWeighting is true, each detection's base variance is
+%   scaled by 1/gamma(omega)^2, where gamma is the order parameter:
+%       gamma = 1 - 3*omega/(4*pi) + omega^2/(8*pi^2)
+%   This increases measurement noise for wobbling molecules (low gamma)
+%   and keeps it at baseline for fixed dipoles (gamma ~ 1).
+
+    if nargin < 8, useOmegaWeighting = false; end
+    if nargin < 9, omegaCurr = []; end
+    if nargin < 10, omegaNext = []; end
+    if nargin < 11, gammaFloor = 0.15; end
+
+    % --- Base CRLB variance (optionally signal-weighted) ---
     if useSignalWeighting && isfield(movieInfo, 'amp') && ...
        ~isempty(movieInfo(iFrame).amp) && ~isempty(movieInfo(nextFrame).amp)
         ampCurr = movieInfo(iFrame).amp(1:nRows, 1);
         ampNext = movieInfo(nextFrame).amp(1:nCols, 1);
-        
-        ampCurrMat = repmat(ampCurr, 1, nCols);
-        ampNextMat = repmat(ampNext', nRows, 1);
-        
-        ampMean = sqrt(ampCurrMat .* ampNextMat);
-        ampMean(ampMean < 1) = 1;
-        
+
         refSignal = 1000;
-        sigma_meas = orientCRLB * sqrt(refSignal ./ ampMean);
-        R_meas = sigma_meas.^2;
+        sigma_curr = orientCRLB * sqrt(refSignal ./ max(ampCurr, 1));
+        sigma_next = orientCRLB * sqrt(refSignal ./ max(ampNext, 1));
     else
-        R_meas = orientCRLB^2;
+        sigma_curr = repmat(orientCRLB, nRows, 1);
+        sigma_next = repmat(orientCRLB, nCols, 1);
     end
+
+    % --- Omega weighting: scale sigma by 1/gamma ---
+    % gamma ~ 1: fixed dipole   -> sigma unchanged
+    % gamma ~ 0: large wobble   -> sigma inflated (orientation unreliable)
+    if useOmegaWeighting && ~isempty(omegaCurr) && ~isempty(omegaNext) && ...
+       (any(omegaCurr > 0) || any(omegaNext > 0))
+        gammaCurr = omegaToGamma(omegaCurr, gammaFloor);
+        gammaNext = omegaToGamma(omegaNext, gammaFloor);
+        sigma_curr = sigma_curr ./ gammaCurr;
+        sigma_next = sigma_next ./ gammaNext;
+    end
+
+    % --- Build [nRows x nCols] variance matrices ---
+    R_curr = repmat(sigma_curr.^2, 1, nCols);   % row i contributes R_curr(i)
+    R_next = repmat(sigma_next'.^2, nRows, 1);   % col j contributes R_next(j)
+end
+
+function gamma = omegaToGamma(omega, gammaFloor)
+%OMEGATOGAMMA Convert wobble solid angle to order parameter gamma.
+%   gamma = 1 - 3*omega/(4*pi) + omega^2/(8*pi^2)
+%   gamma ~ 1: fixed dipole (omega ~ 0)
+%   gamma ~ 0: isotropic rotation (omega ~ 2*pi)
+%   Clamped to [gammaFloor, 1] to avoid divergent variance.
+    if nargin < 2, gammaFloor = 0.15; end
+    gamma = 1 - 3*omega./(4*pi) + omega.^2./(8*pi^2);
+    gamma = max(gammaFloor, min(1, gamma));
 end
 
 function [axis, angle] = estimateAngularVelocity(mu_prev, mu_curr)
