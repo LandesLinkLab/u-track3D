@@ -21,6 +21,14 @@ function [costMat, propagationScheme, kalmanFilterInfoTmp, nonlinkMarker, ...
 %       - Cost: C = Δα² / maxAngDist²
 %       - Simple normalized angular distance
 %       - No physics-based weighting
+%
+%   ⚠ COST-SCALE NOTE (Levels 1 vs 2/3):
+%       Level 1 normalizes by maxAngDist² ≈ (π/2)² ≈ 2.47 rad².
+%       Levels 2/3 normalize by S = 4·D_rot·Δt + 2·σ²; with default
+%       D_rot=0.05 rad²/s, Δt=0.05 s, σ=5° → S ≈ 0.025 rad².
+%       Same wOrient therefore weights orientation ~100× more strongly
+%       at Levels 2/3 than at Level 1. When sweeping levels, retune wOrient
+%       per level or restrict benchmark to a single level (recommend 2).
 %   
 %   LEVEL 2: ADAPTIVE KALMAN (Brownian, LEARNS D_rot)
 %       - Prediction: μ' = μ (Brownian assumption)
@@ -129,12 +137,20 @@ saveCostMat = getFieldOrDefault(costMatParam, 'saveCostMatrix', false);
 costMatSavePath = getFieldOrDefault(costMatParam, 'costMatSavePath', pwd);
 costMatSaveFrame = getFieldOrDefault(costMatParam, 'costMatSaveFrame', 5);
 
+% Cost-scale normalization. When true (default), u-track3D's raw spatial
+% Mahalanobis cost is divided by its median over valid links BEFORE adding
+% the orientation term, so wSpatial and wOrient operate on comparable
+% (mean-1) scales. Without this, raw spatial costs of O(10^3-10^4) silently
+% dominate orientation costs of O(10^0), making wOrient=1 a no-op.
+normalizeSpatial = getFieldOrDefault(costMatParam, 'normalizeSpatial', true);
+
 %% --- Call original u-track cost function ---
 % Remove our custom fields so the original function doesn't choke on them
 fieldsToRemove = {'wSpatial', 'wOrient', 'wOmega', 'maxAngularDist', ...
     'useOrientation', 'saveCostMatrix', 'costMatSavePath', 'costMatSaveFrame', ...
     'useOrientKalman', 'orientKalmanLevel', 'D_rot_prior', 'orientCRLB', ...
-    'frameTime', 'useSignalWeighting', 'minHistoryForAdaptive'};
+    'frameTime', 'useSignalWeighting', 'minHistoryForAdaptive', ...
+    'normalizeSpatial', 'useOmegaWeighting', 'gammaFloor'};
 origParam = costMatParam;
 for i = 1:length(fieldsToRemove)
     if isfield(origParam, fieldsToRemove{i})
@@ -150,6 +166,31 @@ end
 % Store spatial-only cost matrix immediately after base function call
 costMatSpatial = costMat;
 origNonlinkMarker = nonlinkMarker;
+
+%% --- Normalize spatial cost (whole matrix, including birth/death) ---
+% Done BEFORE the with-orientation / no-orientation branches so both paths
+% see comparably scaled costs. Median normalization preserves the LAP
+% solution order in the spatial-only case (monotone transform) and keeps
+% birth/death cells on the same scale as links so the LAP can still reject
+% bad assignments after orientation cost is added.
+if normalizeSpatial && ~isempty(costMat) && ~isscalar(costMat)
+    validMask = costMat ~= nonlinkMarker;
+    if any(validMask(:))
+        vc = costMat(validMask);
+        scale = median(vc(vc > 0));
+        if ~isempty(scale) && isfinite(scale) && scale > eps
+            costMat(validMask) = vc / scale;
+            % Re-anchor nonlinkMarker below the new minimum so LAP still
+            % recognises forbidden cells.
+            newMin = min(costMat(validMask));
+            if isfinite(newMin)
+                newNonlinkMarker = min(floor(newMin) - 5, -5);
+                costMat(costMat == nonlinkMarker) = newNonlinkMarker;
+                nonlinkMarker = newNonlinkMarker;
+            end
+        end
+    end
+end
 
 %% --- Initialize orientation Kalman state if not present ---
 if ~isfield(kalmanFilterInfoTmp, 'orient6D')
@@ -192,7 +233,7 @@ if doOrientMod && (~useOrient || wOrient == 0)
     end
 end
 
-%% --- Apply wSpatial weighting even if no orientation modification ---
+%% --- Apply wSpatial weighting if not 1.0 (normalization already applied) ---
 if ~doOrientMod && ~isempty(costMat) && ~isscalar(costMat) && wSpatial ~= 1.0
     validMask = costMat ~= nonlinkMarker;
     if any(validMask(:))
@@ -468,7 +509,13 @@ if doOrientMod
             cost_backward = dAngle_backward.^2 ./ max(S_total, eps);
             cost_brownian = dAngle_brownian.^2 ./ max(S_total, eps);
             
-            % Take minimum
+            % Take minimum across the 3 hypotheses (forward / backward / Brownian).
+            % NOTE: min over multiple hypotheses introduces a downward bias in
+            % the orientation cost relative to Levels 1 and 2 (the "winner's
+            % curse"). The bias is small here because the 3 costs are highly
+            % correlated (they share the same muNext_j noise), but for
+            % cross-level benchmarking prefer Level 2 to avoid contamination.
+            % See docs/tracking_theory.html for discussion.
             costStack = cat(3, cost_forward, cost_backward, cost_brownian);
             [orientNorm, orientPropagationScheme] = min(costStack, [], 3);
             
@@ -499,12 +546,14 @@ if doOrientMod
     modifyMask = validMask & orientBlock;
     
     if any(modifyMask(:))
+        % Spatial cost was already median-normalized upfront when
+        % normalizeSpatial=true, so origCosts is now ~unit-scale.
         origCosts = costMat(modifyMask);
-        
+
         orientAddFull = zeros(nRows, nCols);
         orientAddBlock = wOrient * orientNorm + wOmega * omegaNorm;
         orientAddFull(1:nOrientRows, 1:nOrientCols) = orientAddBlock;
-        
+
         costMat(modifyMask) = wSpatial * origCosts + orientAddFull(modifyMask);
         
         newMin = min(costMat(costMat ~= nonlinkMarker));

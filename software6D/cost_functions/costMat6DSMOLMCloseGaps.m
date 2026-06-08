@@ -32,9 +32,6 @@ function [costMat, nonlinkMarker, indxMerge, numMerge, indxSplit, numSplit, ...
 %
 %   Emil Gillett, Landes Research Group, UIUC, 2026.
 
-% === DIAGNOSTIC: Confirm this function is being called ===
-fprintf('\n  *** costMat6DSMOLMCloseGaps CALLED ***\n');
-
 %% --- Extract 6D parameters ---
 if isfield(costMatParam, 'wSpatial')
     wSpatial = costMatParam.wSpatial;
@@ -76,11 +73,24 @@ if isfield(costMatParam, 'costMatSavePath')
 else
     costMatSavePath = pwd;
 end
+% Cost-scale normalization (matches costMat6DSMOLMLink.m).
+if isfield(costMatParam, 'normalizeSpatial')
+    normalizeSpatial = costMatParam.normalizeSpatial;
+else
+    normalizeSpatial = true;
+end
+% Quiet diagnostic prints from the base function call by default.
+if isfield(costMatParam, 'verboseDiagnostic')
+    verboseDiagnostic = costMatParam.verboseDiagnostic;
+else
+    verboseDiagnostic = false;
+end
 
 %% --- Call original u-track gap closing cost function ---
 % Remove our custom fields so they don't confuse the base function
 fieldsToRemove = {'wSpatial', 'wOrient', 'wOmega', 'maxAngularDist', ...
-    'useOrientation', 'useBoScaling', 'saveCostMatrix', 'costMatSavePath'};
+    'useOrientation', 'useBoScaling', 'saveCostMatrix', 'costMatSavePath', ...
+    'normalizeSpatial', 'verboseDiagnostic'};
 origParam = costMatParam;
 for i = 1:length(fieldsToRemove)
     if isfield(origParam, fieldsToRemove{i})
@@ -99,15 +109,17 @@ if saveCostMat && ~isempty(costMat)
     costMatSpatial = costMat;
 end
 
-% --- Comprehensive diagnostic output ---
-fprintf('  [costMat6DSMOLMCloseGaps] Base function returned:\n');
-fprintf('    costMat empty: %d, size: [%d x %d]\n', isempty(costMat), size(costMat, 1), size(costMat, 2));
-fprintf('    costMat sparse: %d\n', issparse(costMat));
-fprintf('    errFlag: %s\n', mat2str(errFlag));
-if ~isempty(costMat) && issparse(costMat)
-    fprintf('    nonzero entries (potential links): %d\n', nnz(costMat));
+% --- Diagnostic output (gated) ---
+if verboseDiagnostic
+    fprintf('  [costMat6DSMOLMCloseGaps] Base function returned:\n');
+    fprintf('    costMat empty: %d, size: [%d x %d]\n', isempty(costMat), size(costMat, 1), size(costMat, 2));
+    fprintf('    costMat sparse: %d\n', issparse(costMat));
+    fprintf('    errFlag: %s\n', mat2str(errFlag));
+    if ~isempty(costMat) && issparse(costMat)
+        fprintf('    nonzero entries (potential links): %d\n', nnz(costMat));
+    end
+    fprintf('    nTracks (ends): %d, (starts): %d\n', length(trackEndTime), length(trackStartTime));
 end
-fprintf('    nTracks (ends): %d, (starts): %d\n', length(trackEndTime), length(trackStartTime));
 
 %% --- Early exit conditions ---
 if isempty(costMat) || (~isempty(errFlag) && any(errFlag ~= 0))
@@ -143,8 +155,20 @@ end
 % Number of tracks (gap closing operates on track ends -> track starts)
 nTracks = length(trackEndTime);
 
+% Normalize spatial cost to median=1 across valid links so wSpatial and
+% wOrient operate on comparable scales (see header comment).
+if normalizeSpatial
+    spatialScale = median(vv(vv > 0));
+    if isempty(spatialScale) || ~isfinite(spatialScale) || spatialScale <= eps
+        spatialScale = 1;
+    end
+    vvScaled = vv / spatialScale;
+else
+    vvScaled = vv;
+end
+
 % For each valid link, compute the orientation cost
-newVals = vv;
+newVals = vvScaled;
 
 for k = 1:length(ii)
     iEnd = ii(k);    % Track end index (row)
@@ -217,7 +241,7 @@ for k = 1:length(ii)
     orientCost = wOrient * (dAngle^2 / max(maxAngDist^2, eps)) + ...
                  wOmega  * (dOmega^2 / (2*pi)^2);  % Wobble range is [0, 2π] steradians
     
-    newVals(k) = wSpatial * vv(k) + orientCost;
+    newVals(k) = wSpatial * vvScaled(k) + orientCost;
 end
 
 % Rebuild sparse matrix

@@ -1,0 +1,15 @@
+# Agent/session data
+.claude/
+
+# Backups and logs
+*.bak
+*.SHADOWED.bak
+*.log
+
+# Regenerable benchmark / simulation outputs (rerun the demos/benchmarks)
+software6D/tests/benchmark_output/
+software6D/tests/sim_brownian_*.mat
+
+# OS
+.DS_Store
+Thumbs.db
